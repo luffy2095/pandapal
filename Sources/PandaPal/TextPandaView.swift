@@ -7,10 +7,10 @@ import QuartzCore
 /// so the app does no work while the panda moves.
 final class TextPandaView: PandaShell {
     enum Frame: CaseIterable {
-        case eat, chomp, blink, lookL, lookR, sneeze1, sneeze2, hiccup, drop1, drop2, doze1, doze2,
-             wave1, wave2, stretch1, stretch2, sip1, sip2, hi, happy1, happy2, yawn1, yawn2, curl, nap1, nap2, pet, oops,
+        case eat, chomp, blink, lookL, lookR, sneeze1, sneeze2, hiccup, drop1, drop2,
+             wave1, wave2, stretch1, stretch2, sip1, sip2, hi, happy1, happy2, yawn1, yawn2, curl, nap1, nap2, nap3, pet, oops,
              gaze, sun, hi5, giggle1, giggle2, dizzy, shy, angry1, angry2, pout, hug, dangle1, dangle2, curiousL, curiousR, grumble, cheer,
-             think, talk1, talk2
+             think, talk1, talk2, tide1, tide2, tide3, juggle1, juggle2
     }
 
     /// Each frame, line by line. Raw strings keep the backslashes literal.
@@ -21,12 +21,10 @@ final class TextPandaView: PandaShell {
         .lookL:     [" ●   ●  ╽", " (◐ᴥ◐)ノ╪", " /(_)   ╿"],
         .lookR:     [" ●   ●  ╽", " (◑ᴥ◑)ノ╪", " /(_)   ╿"],
         .sneeze1:   [" ●   ●  ╽", " (>ᴥ<)ノ╪", " /(_)   ╿"],
-        .sneeze2:   [" ●   ●  ╽ ⁎", " (≧ᴥ≦)ノ╪ ⁎⁎", " /(_)   ╿"],
+        .sneeze2:   [" ●   ●  ╽", " (≧ᴥ≦)ノ╪", " /(_)   ╿"],
         .hiccup:    [" ●   ●  ╽ hic!", " (°ᴥ°)ノ╪", " /(_)   ╿"],
         .drop1:     [" ●   ●", " (●ᴥ●)ノ", " /(_) ═╪═"],
         .drop2:     [" ●   ●", " (°ᴥ°) !", " /(_) ═╪═"],
-        .doze1:     [" ●   ●  z", " (-ᴥ-)", " (u u)═╪═"],          // deep focus: curled up asleep, bamboo set down beside it
-        .doze2:     [" ●   ●  zᶻ", " (-ᴥ-)", " (u u)═╪═"],
         .wave1:     [" ●   ●", " (●ᴥ●)ノ", " /(_)"],
         .wave2:     [" ●   ●", " (●ᴥ●)/", " /(_)"],
         .stretch1:  [" ●   ●", #"\(-ᴥ-)/"#, "  (_)"],
@@ -38,35 +36,49 @@ final class TextPandaView: PandaShell {
         .happy2:    [" ●   ●", #"\(♡ᴥ♡)/"#, "  (_)"],
         .yawn1:     [" ●   ●", " (-o-)", " (u u)"],
         .yawn2:     [" ●   ●", " (-O-)", " (u u)"],
-        .curl:      [" ●   ●", " (˘ᴥ˘)", " (u u)"],
-        .nap1:      [" ●   ●  zᶻ", " (-ᴥ-)", " (u u)"],
-        .nap2:      [" ●   ●   zZ", " (-ᴥ-)", " (u u)"],
-        .pet:       [" ●   ●  ♡", " (ᵔᴥᵔ)", #" /(_)\"#],
+        .pet:       [" ●   ●", " (ᵔᴥᵔ)", #" /(_)\"#],
         .oops:      [" ●   ●", " (×ᴥ×)", #"  (_)\_"#],
         .gaze:      [" ●   ●  ╽", " (◔ᴥ◔)ノ╪", " /(_)   ╿"],       // eye rest: gazes into the distance
         .sun:       [" ●   ●  ☼", " (ᵔᴥᵔ)ノ", " /(_)"],            // daylight: waves at the sun
         .hi5:       [" ●   ●  ☆", " (●ᴥ●)ノ", " /(_)"],
-        .giggle1:   [" ●   ●  hehe", " (≧ᴥ≦)", #" /(_)\"#],
-        .giggle2:   [" ●   ●  hehe", " (>ᴥ<)", #" \(_)/"#],
+        .giggle1:   [" ●   ●", " (≧ᴥ≦)", #" /(_)\"#],            // the laugh word is laid over it, a different one each time
+        .giggle2:   [" ●   ●", " (>ᴥ<)", #" \(_)/"#],
         .dizzy:     [" ●   ●  ~", " (@ᴥ@)", "  (_)"],
         .shy:       [" ●   ●", " (⁄ᴥ⁄)", #" /(_)\"#],
-        .angry1:    [" ●   ●  ╬", " (ÒᴥÓ)", #" /(_)\"#],              // cutely angry: puffed up, stomping
-        .angry2:    [" ●   ●   ╬", " (ÒᴥÓ)", #" \(_)/"#],
+        .angry1:    [" ●   ● ╬", " (ÒᴥÓ)", #" /(_)\"#],              // cutely angry: puffed up, stomping
+        .angry2:    [" ●   ●  ╬", " (ÒᴥÓ)", #" \(_)/"#],
         .pout:      [" ●   ●  hmph", " (¬ᴥ¬)", "  (_)"],
-        .hug:       [" ●   ●  ♡", "⊂(ᵔᴥᵔ)⊃", "  (_)"],
+        .hug:       [" ●   ●", "⊂(ᵔᴥᵔ)⊃", "  (_)"],
         .dangle1:   [" ●   ●  wheee", #"\(°ᴥ°)/"#, " (u u)"],
         .dangle2:   [" ●   ●  wheee", #"\(°ᴥ°)/"#, " (v v)"],
-        .curiousL:  [" ●   ●  ?", " (◐ᴥ◐)", " /(_)"],
-        .curiousR:  [" ●   ●  ?", " (◑ᴥ◑)", " /(_)"],
-        .grumble:   [" ●   ●  ..", " (-ᴥ•)", " (u u)"],
+        .curiousL:  [" ●   ● ?", " (◐ᴥ◐)", #" /(_)\"#],
+        .curiousR:  [" ●   ● ?", " (◑ᴥ◑)", #" /(_)\"#],
         .cheer:     [" ●   ●  go!", #"\(●ᴥ●)/"#, "  (_)"],
-        .think:     [" ●   ●  …", " (•ᴥ•)", " /(_)"],
-        .talk1:     [" ●   ●", " (●ᴥ●)", " /(_)"],
-        .talk2:     [" ●   ●", " (●o●)", " /(_)"],
+        .think:     [" ●   ●  …", " (•ᴥ•)", #" /(_)\"#],
+        .talk1:     [" ●   ●", " (●ᴥ●)", #" /(_)\"#],
+        .talk2:     [" ●   ●", " (●o●)", #" /(_)\"#],
+        .tide1:     [" ●   ●", "~(ᵔᴥᵔ~)", "  (_)"],                // the tide dance: both arms flow over to the left,
+        .tide2:     [" ●   ●", #"\(ᵔᴥᵔ)/"#, "  (_)"],              // up as the wave passes,
+        .tide3:     [" ●   ●", "(~ᵔᴥᵔ)~", "  (_)"],                 // and over to the right
+        .juggle1:   [" ●   ●  ╪", " (ᵔᴥᵔ)ノ ╪", " /(_)"],
+        .juggle2:   [" ●   ●   ╪", " (ᵔᴥᵔ)ノ╪", " /(_)"],
+    ]
+
+    /// Frames where it lies on its side: the upright panda in `body` is drawn, then turned a quarter so its head
+    /// rests on the left and its legs point right, and `over` (its z's) is drawn upright on top.
+    static let asleep = [" ●   ●", " (-ᴥ-)", " (u u)"]
+    static let lying: [Frame: (body: [String], over: [String])] = [
+        .curl: ([" ●   ●", " (˘ᴥ˘)", " (u u)"], []),                    // lies down
+        .nap1: (asleep, ["      z"]),
+        .nap2: (asleep, ["      z z"]),
+        .nap3: (asleep, ["      z z Z"]),
+        .grumble: ([" ●   ●", " (-ᴥ•)", " (u u)"], ["      .."]),      // one eye opens
     ]
 
     static let font = NSFont(name: "Menlo-Regular", size: 22) ?? .monospacedSystemFont(ofSize: 22, weight: .regular)
     static let pad: CGFloat = 4            // room for the rim
+    /// Words in a frame ("hi", "hehe", "wheee") are smaller than the panda, so they read as its voice.
+    static let wordFont = NSFont(name: "Menlo-Regular", size: 16) ?? .monospacedSystemFont(ofSize: 16, weight: .regular)
 
     static func fill(_ c: Character, dark: Bool) -> NSColor {
         if "╽╪╿═".contains(c) { return NSColor(red: 0.30, green: 0.66, blue: 0.25, alpha: 1) }   // bamboo
@@ -74,6 +86,10 @@ final class TextPandaView: PandaShell {
         if c == "☼" || c == "☆" { return NSColor(red: 0.98, green: 0.68, blue: 0.10, alpha: 1) }
         if c == "⁄" { return NSColor(red: 0.98, green: 0.42, blue: 0.58, alpha: 1) }          // a blush
         if c == "╬" { return NSColor(red: 0.93, green: 0.26, blue: 0.26, alpha: 1) }          // an anger mark
+        if c == "✿" { return NSColor(red: 0.98, green: 0.42, blue: 0.58, alpha: 1) }          // gifts
+        if "★☾".contains(c) { return NSColor(red: 0.98, green: 0.68, blue: 0.10, alpha: 1) }
+        if "♪♫".contains(c) { return NSColor(red: 0.55, green: 0.45, blue: 0.95, alpha: 1) }
+        if c == "☘" { return NSColor(red: 0.30, green: 0.66, blue: 0.25, alpha: 1) }
         return dark ? NSColor(white: 0.93, alpha: 1) : NSColor(white: 0.1, alpha: 1)
     }
 
@@ -113,10 +129,21 @@ final class TextPandaView: PandaShell {
         for rim in [true, false] {
             for (row, line) in lines.enumerated() {
                 let y = size.height - pad - CGFloat(row + 1) * lineHeight
+                // a word is two or more letters, maybe with "!"; it starts at its column, in the smaller font
+                var inWord = Set<Int>()
+                for r in line.ranges(of: #/[A-Za-z]{2,}!?/#) {
+                    let start = line.distance(from: line.startIndex, to: r.lowerBound)
+                    inWord.formUnion(start..<start + line[r].count)
+                    var a = attributes("a", dark: dark, rim: rim)
+                    a[.font] = wordFont
+                    let x = pad + CGFloat(columns(String(line[..<r.lowerBound]))) * cellWidth
+                    let lift = (lineHeight - NSLayoutManager().defaultLineHeight(for: wordFont)) / 2
+                    NSAttributedString(string: String(line[r]), attributes: a).draw(at: NSPoint(x: x, y: y + lift))
+                }
                 var col = 0
-                for c in line {
+                for (i, c) in line.enumerated() {
                     let span = wide.contains(c) ? 2 : 1
-                    if c != " " {
+                    if c != " ", !inWord.contains(i) {
                         let glyph = NSAttributedString(string: String(c), attributes: attributes(c, dark: dark, rim: rim))
                         let x = pad + CGFloat(col) * cellWidth + (CGFloat(span) * cellWidth - glyph.size().width) / 2
                         glyph.draw(at: NSPoint(x: x, y: y))
@@ -129,19 +156,45 @@ final class TextPandaView: PandaShell {
         return rep.cgImage!
     }
 
+    /// One frame as an image: its lines, or the panda lying on its side.
+    static func draw(_ f: Frame, dark: Bool) -> CGImage {
+        guard let l = lying[f] else { return render(art[f]!, dark: dark) }
+        // the upright panda fills columns 1 to 5 of the grid; take them with a little of the rim around them
+        let body = render(l.body, dark: dark)
+            .cropping(to: CGRect(x: (pad + cellWidth - 3) * 2, y: 0, width: (5 * cellWidth + 6) * 2, height: size.height * 2))!
+        let w = CGFloat(body.width) / 2, h = CGFloat(body.height) / 2
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        let ctx = NSGraphicsContext.current!.cgContext
+        ctx.scaleBy(x: 2, y: 2)
+        ctx.draw(render(l.over, dark: dark), in: CGRect(origin: .zero, size: size))
+        ctx.translateBy(x: pad + h / 2, y: w / 2)                     // turned, it is h wide and w tall, on the ground
+        ctx.rotate(by: .pi / 2)
+        ctx.draw(body, in: CGRect(x: -w / 2, y: -h / 2, width: w, height: h))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.cgImage!
+    }
+
     let holder = CALayer()        // bottom anchor: hops, squish, tumble
     let face = CALayer()
+    let giftLayer = CALayer()     // today's gift, on the ground beside the panda; it stays put while the panda moves
+    let sayLayer = CALayer()      // a word it says for a moment, such as its laugh, laid over the frame
+    static let laughs = ["hehe", "haha", "hihi", "teehee", "hoho", "ehehe"]
+    private var words: [String: CGImage] = [:]
     private var cache: [Frame: CGImage] = [:]
     private var dark = false
     /// Draws a frame the first time it is needed; rare frames such as the sneeze cost nothing until then.
     private func image(_ f: Frame) -> CGImage {
         if let img = cache[f] { return img }
-        let img = Self.render(Self.art[f]!, dark: dark)
+        let img = Self.draw(f, dark: dark)
         cache[f] = img
         return img
     }
     private var paused = false
-    private var dozing = false    // curled up asleep by its bamboo during deep focus, so it never distracts you
+    private var dozing = false    // asleep on its side during deep focus, so it never distracts you
     private(set) var mood: Mood = .eating
 
     var deepFocus: Bool { mood == .eating && focusMinutes >= 25 }
@@ -159,6 +212,13 @@ final class TextPandaView: PandaShell {
         face.frame = holder.bounds
         face.contentsScale = 2
         holder.addSublayer(face)
+        giftLayer.frame = holder.bounds
+        giftLayer.contentsScale = 2
+        layer!.addSublayer(giftLayer)
+        sayLayer.frame = holder.bounds
+        sayLayer.contentsScale = 2
+        sayLayer.opacity = 0
+        layer!.addSublayer(sayLayer)
         dark = isDark
         applyPose()
     }
@@ -171,7 +231,19 @@ final class TextPandaView: PandaShell {
         guard dark != isDark else { return }
         dark = isDark
         cache = [:]
+        words = [:]
         applyPose()
+        showGift()
+    }
+
+    override var gift: Gift? { didSet { if gift != oldValue { showGift() } } }
+
+    /// The gift in the free bottom-right corner of the grid.
+    private func showGift() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        giftLayer.contents = gift.map { Self.render(["", "", String(repeating: " ", count: 11) + String($0.symbol)], dark: dark) }
+        CATransaction.commit()
     }
 
     // MARK: motion
@@ -185,6 +257,7 @@ final class TextPandaView: PandaShell {
         a.duration = step * Double(frames.count)
         a.repeatCount = repeats
         face.add(a, forKey: key)
+        if key == "burst" { onMoment?(a.duration * Double(repeats)) }
     }
 
     /// A long still frame with a quick blink at the end, looping.
@@ -213,7 +286,7 @@ final class TextPandaView: PandaShell {
         let bigHello = lastBreakMinutes >= 30 || bondLevel >= 1     // at bond level 1 it runs to greet you
         let base: Frame
         switch mood {
-        case .eating: base = dozing ? .doze1 : .eat
+        case .eating: base = dozing ? .nap1 : .eat
         case .wantsBreak: base = .wave1
         case .happy: base = bigHello ? .happy1 : .hi
         case .napping: base = .nap1
@@ -223,12 +296,12 @@ final class TextPandaView: PandaShell {
         face.contents = image(base)
         CATransaction.commit()
         switch mood {
-        case .eating where dozing: flip([.doze1, .doze2], step: 0.9, repeats: .infinity, key: "loop")
+        case .eating where dozing: flip([.nap1, .nap2, .nap3], step: 0.9, repeats: .infinity, key: "loop")
         case .eating: blinkLoop(.eat, .blink)
         case .wantsBreak: flip([.wave1, .wave2], step: 0.4, repeats: .infinity, key: "loop")
         case .happy where bigHello: flip([.happy1, .happy2], step: 0.35, repeats: .infinity, key: "loop")
         case .happy: flip([.hi, .hi, .hi, .wave1], step: 0.4, repeats: .infinity, key: "loop")
-        case .napping: flip([.nap1, .nap2], step: 0.8, repeats: .infinity, key: "loop")
+        case .napping: flip([.nap1, .nap2, .nap3], step: 0.8, repeats: .infinity, key: "loop")
         }
     }
 
@@ -237,7 +310,7 @@ final class TextPandaView: PandaShell {
         mood = new
         applyPose()
         if new == .napping {
-            flip([.yawn1, .yawn2, .yawn2, .stretch1, .curl, .curl], step: 0.6)     // yawns and stretches, then sleeps
+            flip([.yawn1, .yawn2, .yawn2, .stretch1, .curl, .curl], step: 0.6)     // yawns and stretches, then lies down
         } else {
             burst()
             if new == .happy, bondLevel >= 2, !paused { tumble() }          // at bond level 2 it shows off a roll
@@ -255,20 +328,27 @@ final class TextPandaView: PandaShell {
             if let t = temper, Int.random(in: 0..<3) == 0 {        // a third of its moments show today's mood
                 switch t {
                 case .sleepy: flip([.yawn1, .yawn2, .yawn2, .blink, .eat], step: 0.6)
-                case .playful: flip([.giggle1, .giggle2, .giggle1, .eat], step: 0.3)
+                case .playful:
+                    flip([.giggle1, .giggle2, .giggle1, .eat], step: 0.3)
+                    laugh(0.9)
                 case .grumpy: flip([.pout, .pout, .eat], step: 0.6)
                 case .cuddly: flip([.pet, .pet, .eat], step: 0.6)
                 case .curious: flip(cursorSide < 0 ? [.curiousL, .curiousL, .eat] : [.curiousR, .curiousR, .eat], step: 0.6)
                 }
                 return
             }
-            switch Int.random(in: 0..<20) {
+            switch Int.random(in: 0..<23) {
             case 0..<13: flip([.eat, .chomp, .eat, .chomp, .eat, .chomp], step: 0.35)
             case 13..<17:
                 let look: [Frame] = cursorSide < 0 ? [.lookL, .lookL, .lookL, .eat] : cursorSide > 0 ? [.lookR, .lookR, .lookR, .eat]
                                   : [.lookL, .lookL, .eat, .lookR, .lookR, .eat]
                 flip(look, step: 0.5)
-            case 17: flip([.eat, .sneeze1, .sneeze1, .sneeze2, .sneeze2, .eat], step: 0.4)
+            case 17:
+                flip([.eat, .sneeze1, .sneeze1, .sneeze2, .sneeze2, .eat], step: 0.4)
+                sneezeSpray(after: 1.2)
+            case 19: bubble()
+            case 20: leaf()
+            case 21: butterfly()
             case 18:
                 flip([.hiccup, .eat, .eat, .hiccup, .eat], step: 0.4)
                 move("transform.translation.y", [0, 4, 0, 0, 0, 4, 0], 2)
@@ -318,22 +398,27 @@ final class TextPandaView: PandaShell {
         case .pet: pet()
         case .highFive:
             flip([.hi5, .hi5, .hi5], step: 0.4)
+            sparkles()
             move("transform.translation.y", [0, 6, 0], 0.4)
         case .giggle:
+            laugh(1.5)
             flip([.giggle1, .giggle2, .giggle1, .giggle2, .giggle1, .giggle2], step: 0.25)
             move("transform.rotation.z", [0, 0.06, -0.06, 0.06, -0.06, 0], 1.5)
         case .dizzy:
             flip([.dizzy, .dizzy, .dizzy, .dizzy, .dizzy], step: 0.4)
+            dizzyStars(2)
             tumble()
         case .shy:
             flip(Array(repeating: .shy, count: 10), step: 1)                     // hides its face for 10 seconds
         case .angry:                                                             // each tap restarts it, so it ends when the taps stop
             flip([.angry1, .angry2, .angry1, .angry2, .angry1, .angry2], step: 0.3)
+            steam()
             move("transform.translation.y", [0, 3, 0, 3, 0, 3, 0], 1.8)
         case .pout:
             flip([.pout, .pout, .pout, .pout], step: 0.5)
             move("transform.translation.x", [0, -3, 3, -3, 0], 0.5)
         case .hug:
+            floatHearts()
             flip([.hug, .hug, .hug, .hug], step: 0.5)
             move("transform.scale.y", [0, -0.05, -0.05, 0.02, 0], 1.6)
             move("transform.scale.x", [0, 0.05, 0.05, -0.02, 0], 1.6)
@@ -346,14 +431,48 @@ final class TextPandaView: PandaShell {
             face.removeAnimation(forKey: "dangle")
             flip([.dizzy, .dizzy, .dizzy, .dizzy], step: 0.5)
             move("transform.rotation.z", [0, 0.1, -0.1, 0.08, -0.08, 0], 2)
+            dizzyStars(2)
         case .curious:
             let f: Frame = cursorSide < 0 ? .curiousL : .curiousR
             flip([f, f, f, f], step: 0.5)
         case .grumble: flip([.grumble, .grumble, .grumble, .nap1], step: 0.6)    // one eye opens, then back to sleep
         case .wakeUp: flip([.yawn1, .yawn2, .yawn2, .blink, .eat], step: 0.6)
+        case .dance: tideDance()
         case .cheer:
             flip([.cheer, .stretch2, .cheer, .stretch2], step: 0.4)
             move("transform.translation.y", [0, 6, 0, 6, 0], 1.2)
+        }
+    }
+
+    /// A surprise after care or play.
+    override func treat(_ t: Treat) {
+        guard !paused else { return }
+        switch t {
+        case .heart:
+            flip([.pet, .happy1, .pet, .happy1, .happy1], step: 0.4)
+            floatHearts()
+            move("transform.translation.y", [0, 6, 0, 6, 0], 1.2)
+        case .gift:
+            flip([.happy1, .happy2, .happy1, .happy2], step: 0.35)
+            move("transform.translation.y", [0, 8, 0], 0.6)
+            let a = CABasicAnimation(keyPath: "opacity")              // the gift appears beside it
+            a.fromValue = 0
+            a.toValue = 1
+            a.duration = 1
+            giftLayer.add(a, forKey: "appear")
+        case .trick(.wave):
+            flip([.wave1, .wave2, .wave1, .wave2, .hi], step: 0.35)
+            move("transform.translation.y", [0, 5, 0], 0.5)
+        case .trick(.roll):
+            flip([.happy1, .happy1, .happy2], step: 0.4)
+            move("transform.rotation.z", [0, 0.4, 3.14, 5.9, 6.283], 1.2)
+        case .trick(.spin):                                             // turns all the way round on the spot
+            flip([.hi, .happy1, .happy1, .hi], step: 0.3)
+            move("transform.scale.x", [0, -1, -2, -1, 0], 1.2)
+        case .trick(.dance):
+            tideDance()
+        case .trick(.juggle):
+            flip([.juggle1, .juggle2, .juggle1, .juggle2, .juggle1, .juggle2, .hi], step: 0.3)
         }
     }
 
@@ -364,10 +483,183 @@ final class TextPandaView: PandaShell {
         else { face.removeAnimation(forKey: "talk") }
     }
 
+    /// A little symbol that pops in, moves through `path`, and fades. The compositor runs it, and the layer removes
+    /// itself after, so a moment like this costs no CPU while it plays.
+    private struct Mote {
+        var text: String, size: CGFloat, color: NSColor, path: [CGPoint]
+        var delay = 0.0, duration = 1.4, spin: CGFloat = 0, scales: [CGFloat] = [0.3, 1.15, 1], flap = false
+    }
+
+    private func motes(_ list: [Mote]) {
+        guard !paused, let root = layer else { return }
+        var made: [CALayer] = []
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { made.forEach { $0.removeFromSuperlayer() } }
+        let now = root.convertTime(CACurrentMediaTime(), from: nil)
+        for m in list {
+            let l = CATextLayer()
+            l.string = m.text
+            l.font = NSFont.systemFont(ofSize: m.size)
+            l.fontSize = m.size
+            l.foregroundColor = m.color.cgColor
+            l.alignmentMode = .center
+            l.contentsScale = window?.backingScaleFactor ?? 2
+            l.bounds = CGRect(x: 0, y: 0, width: m.size * CGFloat(m.text.count + 1), height: m.size * 1.3)
+            l.position = m.path[0]
+            l.opacity = 0
+            root.addSublayer(l)
+            made.append(l)
+            let move = CAKeyframeAnimation(keyPath: "position")
+            move.values = m.path.map { NSValue(point: $0) }
+            move.calculationMode = .cubic
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = [0, 1, 1, 0]
+            fade.keyTimes = [0, 0.12, 0.75, 1]
+            let grow = CAKeyframeAnimation(keyPath: "transform.scale")
+            grow.values = m.scales
+            var all: [CAAnimation] = [move, fade, grow]
+            if m.spin != 0 {
+                let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+                turn.byValue = m.spin
+                all.append(turn)
+            }
+            if m.flap {                                                      // wings open and close
+                let f = CAKeyframeAnimation(keyPath: "transform.scale.x")
+                f.values = [1, 0.35, 1]
+                f.duration = 0.3
+                f.repeatCount = Float(m.duration / 0.3)
+                all.append(f)
+            }
+            let g = CAAnimationGroup()
+            g.animations = all
+            g.duration = m.duration
+            g.beginTime = now + m.delay
+            g.fillMode = .backwards
+            l.add(g, forKey: "mote")
+        }
+        CATransaction.commit()
+        onMoment?(list.map { $0.delay + $0.duration }.max() ?? 0)
+    }
+
+    /// A point on the panda's grid: `col` columns from the left, `y` points up from the bottom.
+    private func at(_ col: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: Self.pad + col * Self.cellWidth, y: y) }
+
+    /// One big heart and three small ones rise beside its head and fade.
+    private func floatHearts() {
+        let pink = Self.fill("♡", dark: dark)
+        let hearts: [(CGFloat, CGFloat, CGFloat, Double, CGFloat)] = [(30, 8.8, 24, 0, 0), (15, 7.2, 16, 0.15, -6),
+                                                                      (13, 11.4, 30, 0.3, 6), (11, 10.2, 20, 0.5, 2)]
+        motes(hearts.map { size, col, y, delay, drift in
+            Mote(text: "♥", size: size, color: pink, path: [at(col, y), at(col, y + 34).applying(.init(translationX: drift, y: 0))], delay: delay)
+        })
+    }
+
+    /// Three stars circle its head, a turn and a half.
+    private func dizzyStars(_ seconds: Double) {
+        let gold = Self.fill("☆", dark: dark), c = at(3.5, 69)
+        motes((0..<3).map { k in
+            let path = (0...12).map { i -> CGPoint in
+                let a = Double(i) / 8 * 2 * .pi + Double(k) * 2 * .pi / 3
+                return CGPoint(x: c.x + 26 * cos(a), y: c.y + 6 * sin(a))
+            }
+            return Mote(text: "✦", size: 11, color: gold, path: path, duration: seconds, scales: [0.6, 1, 1])
+        })
+    }
+
+    /// Little steam puffs rise from its ears.
+    private func steam() {
+        let grey = NSColor(white: 0.6, alpha: 1)
+        motes([(1.0, -12.0, 0.0), (5.0, 14.0, 0.25), (1.0, -10.0, 0.5), (5.0, 12.0, 0.75)].map { col, drift, delay in
+            Mote(text: "☁", size: 13, color: grey, path: [at(col, 64), at(col, 72).applying(.init(translationX: drift, y: 0))],
+                 delay: delay, duration: 0.8, scales: [0.5, 1, 1.3])
+        })
+    }
+
+    /// Droplets spray from its nose in little arcs and fall.
+    func sneezeSpray(after delay: Double) {
+        let blue = NSColor(red: 0.45, green: 0.72, blue: 0.98, alpha: 1), nose = at(3.5, 38)
+        motes([-34.0, -18, 18, 34, 48].enumerated().map { i, dx in
+            let peak = CGPoint(x: nose.x + dx * 0.5, y: nose.y + 10 + CGFloat(i % 2) * 6)
+            return Mote(text: "•", size: 9, color: blue, path: [nose, peak, CGPoint(x: nose.x + dx, y: nose.y - 14)],
+                        delay: delay, duration: 0.7, scales: [0.6, 1, 0.8])
+        })
+    }
+
+    /// A burst of sparkles from its raised paw.
+    private func sparkles() {
+        let gold = Self.fill("☆", dark: dark), paw = at(8.5, 60)
+        motes((0..<6).map { i in
+            let a = Double(i) / 6 * 2 * .pi + 0.3
+            return Mote(text: "✦", size: 9, color: gold, path: [paw, CGPoint(x: paw.x + 16 * cos(a), y: paw.y + 12 * sin(a))],
+                        duration: 0.6, scales: [0.3, 1.2, 0.6])
+        })
+    }
+
+    /// It blows a bubble that grows, drifts up, and pops into specks.
+    func bubble() {
+        flip([.talk2, .talk2, .talk2, .eat, .eat], step: 0.5)
+        let blue = NSColor(red: 0.45, green: 0.72, blue: 0.98, alpha: 1), end = at(8, 62)
+        motes([Mote(text: "○", size: 14, color: blue, path: [at(3.5, 36), at(6, 50), end], duration: 1.8, scales: [0.2, 1, 1.8])]
+              + (0..<4).map { i in
+                  let a = Double(i) / 4 * 2 * .pi + 0.6
+                  return Mote(text: "•", size: 7, color: blue, path: [end, CGPoint(x: end.x + 14 * cos(a), y: end.y + 10 * sin(a))],
+                              delay: 1.6, duration: 0.4, scales: [1, 1, 0.6])
+              })
+    }
+
+    /// A bamboo leaf drifts down beside it, and it watches it fall.
+    func leaf() {
+        flip([.lookR, .lookR, .lookR, .lookR, .lookR, .eat], step: 0.7)
+        let green = Self.fill("╪", dark: dark)
+        motes([Mote(text: "❦", size: 14, color: green, path: [at(12, 84), at(10.5, 62), at(12, 42), at(10, 22), at(11, 6)],
+                    duration: 3.6, spin: 2.5, scales: [1, 1, 1])])
+    }
+
+    /// One of its laughs beside its ear for `seconds`, a different one each time.
+    private func laugh(_ seconds: Double) {
+        guard !paused else { return }
+        let word = Self.laughs.randomElement()!
+        let image = words[word] ?? Self.render(["        " + word], dark: dark)
+        words[word] = image
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sayLayer.contents = image
+        CATransaction.commit()
+        let a = CAKeyframeAnimation(keyPath: "opacity")
+        a.values = [0, 1, 1, 0]
+        a.keyTimes = [0, 0.08, 0.85, 1]
+        a.duration = seconds
+        sayLayer.add(a, forKey: "say")
+    }
+
+    /// The tide: both arms flow over to one side, up, and over to the other, three times, while it sways and notes rise.
+    func tideDance() {
+        let steps: [Frame] = [.tide2, .tide1, .tide2, .tide3, .tide2, .tide1, .tide2, .tide3, .tide2, .tide1, .tide2, .tide3, .tide2]
+        flip(steps + [.hi], step: 0.35)
+        // one value per frame, so it leans the way its arms flow: left with the left tide, right with the right
+        let lean: [CGFloat] = [0, -1, 0, 1, 0, -1, 0, 1, 0, -1, 0, 1, 0, 0, 0]
+        move("transform.translation.x", lean.map { $0 * 4 }, 0.35 * Double(lean.count - 1))
+        move("transform.rotation.z", lean.map { -$0 * 0.05 }, 0.35 * Double(lean.count - 1))
+        let purple = Self.fill("♪", dark: dark)
+        motes([("♪", 9.0, 0.3), ("♫", 11.0, 1.7), ("♪", 9.5, 3.1)].map { note, col, delay in
+            Mote(text: note, size: 14, color: purple, path: [at(col, 34), at(col + 0.6, 52), at(col, 72)], delay: delay, duration: 1.4)
+        })
+    }
+
+    /// A butterfly flutters in, rests between its ears while it wonders, and flies off.
+    func butterfly() {
+        flip([.lookR, .lookR, .curiousR, .curiousR, .curiousR, .curiousR, .lookR, .eat], step: 0.6)
+        let orange = NSColor(red: 0.95, green: 0.58, blue: 0.2, alpha: 1)
+        motes([Mote(text: "ƸӜƷ", size: 12, color: orange,
+                    path: [at(14, 40), at(11.5, 58), at(8.5, 50), at(5.5, 74), at(3.2, 70), at(3.0, 69), at(3.3, 70), at(6, 77), at(10, 70), at(15, 77)],
+                    duration: 4.8, scales: [1, 1, 1], flap: true)])
+    }
+
     override func pet() {
         move("transform.scale.x", [0, 0.06, -0.02, 0], 0.5)
         move("transform.scale.y", [0, -0.06, 0.02, 0], 0.5)
         flip([.pet, .pet], step: 0.8)
+        floatHearts()
     }
 
     override func tumble() {
@@ -391,11 +683,13 @@ final class TextPandaView: PandaShell {
         }
     }
 
-    /// Writes every frame, in both modes, over a matching background. Used by `--snapshot`.
+    /// Writes every frame, and each gift beside the panda, in both modes, over a matching background. Used by `--snapshot`.
     static func writeFrames(to dir: URL) {
+        let gifts = Gift.allCases.map { g in
+            ("gift-\(g)", art[.eat]!.enumerated().map { $0 == 2 ? $1.padding(toLength: 11, withPad: " ", startingAt: 0) + String(g.symbol) : $1 })
+        }
         for dark in [true, false] {
-            for f in Frame.allCases {
-                let img = render(art[f]!, dark: dark)
+            for (f, img) in Frame.allCases.map({ ("\($0)", draw($0, dark: dark)) }) + gifts.map({ ($0.0, render($0.1, dark: dark)) }) {
                 let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: img.width, pixelsHigh: img.height, bitsPerSample: 8,
                                            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
                                            bytesPerRow: 0, bitsPerPixel: 0)!

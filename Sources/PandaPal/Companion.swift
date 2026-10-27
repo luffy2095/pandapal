@@ -107,6 +107,8 @@ final class Companion {
                     parameters: schema([])) { _ in await act(.weather) },
             BaoTool(name: "screen_time_today", description: "Only when the user asks about their own screen time, breaks or eye rests today.",
                     parameters: schema([])) { _ in await act(.day) },
+            BaoTool(name: "current_time", description: "The date, day and time now. Use it when the user asks what time, day or date it is.",
+                    parameters: schema([])) { _ in Date().formatted(date: .complete, time: .shortened) },
         ]
     }
 
@@ -161,9 +163,10 @@ final class Companion {
                     chat = LanguageModelSession(tools: tools, instructions: persona)
                     continue
                 }
-                // ModelManagerError 1013: macOS refused to run the model now, seen under critical memory pressure
+                // macOS refused to run the model under critical memory pressure: ModelManagerError 1013 on older
+                // systems, "Not executed due to current system state [CriticalMemoryPressure]" on macOS 27
                 failure = Self.isUnsafe(error) ? "(•ᴥ•) I can't help with that one. Ask me something else?"
-                        : "\(error)".contains("ModelManagerError Code=1013")
+                        : ["Code=1013", "MemoryPressure"].contains(where: "\(error)".contains)
                         ? "(˘ᴥ˘) Your Mac is low on memory, so macOS paused my thinking. Close an app or two and ask again?"
                         : "(•ᴥ•) My thoughts got tangled. Can you ask again?"
                 break

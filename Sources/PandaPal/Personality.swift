@@ -1,11 +1,11 @@
 import Foundation
 
 /// What your mouse did to the panda, as recognised by the view.
-enum Gesture: Equatable { case tap, longPress, dragStart, dragEnd(shaken: Bool), hover, tickle }
+enum Gesture: Equatable { case tap, longPress, dragStart, dragEnd(shaken: Bool), hover, tickle, wave }
 
 /// How the panda answers.
 enum Reaction: Equatable {
-    case pet, highFive, giggle, dizzy, shy, angry, pout, hug, dangle, drop, dizzyDrop, curious, grumble, wakeUp, cheer
+    case pet, highFive, giggle, dizzy, shy, angry, pout, hug, dangle, drop, dizzyDrop, curious, grumble, wakeUp, cheer, dance
 }
 
 /// Bao's mood for the day. It tunes the rules below, and Apple's model speaks in it.
@@ -37,6 +37,7 @@ struct Personality {
     private var angryUntil: Date?
     private var lastHover: Date?
     private var lastTickle: Date?
+    private var lastWave: Date?
     private var lastSeen: Date?
 
     mutating func react(_ g: Gesture, mood: Mood, now: Date) -> Reaction? {
@@ -80,6 +81,10 @@ struct Personality {
             guard lastTickle.map({ now.timeIntervalSince($0) >= 2 }) ?? true else { return nil }
             lastTickle = now
             return .giggle
+        case .wave:                                                                // the pointer waved side to side over it
+            guard mood != .napping, lastWave.map({ now.timeIntervalSince($0) >= 5 }) ?? true else { return nil }
+            lastWave = now
+            return .dance
         case .hover:
             guard mood != .napping, temper != .sleepy,
                   lastHover.map({ now.timeIntervalSince($0) >= (temper == .curious ? 8 : 20) }) ?? true else { return nil }

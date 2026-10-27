@@ -5,6 +5,7 @@ import AppKit
 class PandaShell: NSView {
     var onGesture: ((Gesture) -> Void)?
     var onHoverChanged: ((Bool) -> Void)?   // the pointer arrived or left: shows and hides the talk invite
+    var onMoment: ((Double) -> Void)?       // a moment started that lasts this many seconds: the talk invite steps aside
     var contextMenu: NSMenu?
     var focusMinutes: Double = 0        // screen time without a break, for deep-focus behaviour
     var lastBreakMinutes: Double = 0    // how long the last break was, for the size of the greeting
@@ -12,6 +13,7 @@ class PandaShell: NSView {
     var bondLevel = 0                   // 0, 1 or 2: higher bond unlocks bigger greetings and tricks
     var temper: Temper?                 // today's mood, which colours some of its moments
     var cursorSide = 0                  // -1 left, 0 near, 1 right: where to glance during a moment
+    var gift: Gift?                     // today's gift, which sits beside the panda
     var headPoint: NSPoint { NSPoint(x: bounds.midX, y: bounds.maxY) }   // where speech bubbles point
 
     func show(_ mood: Mood) {}
@@ -21,6 +23,7 @@ class PandaShell: NSView {
     func setPaused(_ paused: Bool) {}
     func cue(_ cue: Cue) {}
     func react(_ reaction: Reaction) {}
+    func treat(_ t: Treat) {}           // a surprise: a trick, a heart, or a gift
     func thinking() {}                  // waiting for its own words
     func talking(_ on: Bool) {}         // mouth moves while words appear
 
@@ -32,6 +35,8 @@ class PandaShell: NSView {
     private var flips: [Date] = []      // horizontal direction changes while dragging: a shake
     private var lastDY: CGFloat = 0
     private var wiggles: [Date] = []    // vertical direction changes of the pointer over the panda: a tickle
+    private var lastMoveDX: CGFloat = 0
+    private var sways: [Date] = []      // side-to-side direction changes of the pointer over the panda: a wave
 
     override func mouseDown(with event: NSEvent) {
         downPoint = event.locationInWindow
@@ -90,6 +95,8 @@ class PandaShell: NSView {
     override func mouseEntered(with event: NSEvent) {
         lastDY = 0
         wiggles = []
+        lastMoveDX = 0
+        sways = []
         onGesture?(.hover)
         onHoverChanged?(true)
     }
@@ -98,6 +105,16 @@ class PandaShell: NSView {
 
     /// Four fast up-and-down turns within a second, without clicking, is a tickle. Only while the pointer is over the panda.
     override func mouseMoved(with event: NSEvent) {
+        let dx = event.deltaX                                        // four side-to-side turns in 1.5 seconds: a wave
+        if abs(dx) > 2 {
+            if lastMoveDX != 0, (dx > 0) != (lastMoveDX > 0) { sways.append(Date()) }
+            lastMoveDX = dx
+            sways = sways.filter { Date().timeIntervalSince($0) < 1.5 }
+            if sways.count >= 4 {
+                sways = []
+                onGesture?(.wave)
+            }
+        }
         let dy = event.deltaY
         guard abs(dy) > 2 else { return }                            // slow movement is not a tickle
         if lastDY != 0, (dy > 0) != (lastDY > 0) { wiggles.append(Date()) }

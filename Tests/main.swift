@@ -155,6 +155,12 @@ precondition(d.react(.hover, mood: .eating, now: t0.addingTimeInterval(3)) == .c
 precondition(d.react(.hover, mood: .eating, now: t0.addingTimeInterval(10)) == nil, "not curious again for 20 seconds")
 precondition(d.react(.hover, mood: .napping, now: t0.addingTimeInterval(60)) == nil, "asleep: does not notice")
 var k = Personality()
+var w2 = Personality()
+precondition(w2.react(.wave, mood: .eating, now: t0) == .dance, "waving the pointer at it: it dances")
+precondition(w2.react(.wave, mood: .eating, now: t0.addingTimeInterval(2)) == nil
+          && w2.react(.wave, mood: .eating, now: t0.addingTimeInterval(6)) == .dance, "one dance at a time, 5 seconds apart")
+var sleeper = Personality()
+precondition(sleeper.react(.wave, mood: .napping, now: t0) == nil, "asleep, it does not dance")
 precondition(k.react(.tickle, mood: .eating, now: t0) == .giggle, "a fast up-and-down swipe tickles it")
 precondition(k.react(.tickle, mood: .eating, now: t0.addingTimeInterval(1)) == nil, "one giggle at a time")
 precondition(k.react(.tickle, mood: .eating, now: t0.addingTimeInterval(2.5)) == .giggle, "it can be tickled again")
@@ -200,5 +206,54 @@ precondition(r(7, nil, nil, time(2, 23, 0)) == time(3, 7), "'at 7' late at night
 precondition(r(nil, nil, 20, time(2, 9)) == time(2, 9, 20), "in 20 minutes")
 precondition(r(nil, nil, nil, time(2, 9)) == nil && r(25, 0, nil, time(2, 9)) == nil, "no usable time: no reminder")
 print("reminders ok")
+
+// surprises: care can bring a gift, a heart or a trick; play brings no gifts and is capped
+precondition(Rewards.roll(care: true, bond: 0, r: 0.05, pick: 0) == .gift(.flower), "a low roll after care is a gift")
+precondition(Rewards.roll(care: true, bond: 0, r: 0.2, pick: 0) == .heart, "a middle roll after care is a heart")
+precondition(Rewards.roll(care: true, bond: 0, r: 0.9, pick: 0.99) == .trick(.wave), "otherwise a trick Bao knows")
+precondition(Rewards.roll(care: false, bond: 200, r: 0.05, pick: 0) == .heart, "play never brings a gift")
+precondition(Rewards.roll(care: true, bond: 200, r: 0.05, pick: 0) == .gift(.flower)
+          && Rewards.roll(care: true, bond: 200, r: 0.05, pick: 0.999) == .gift(.moon), "the newest gift is the rarest")
+precondition(Rewards.unlocked(0).count == 2 && Rewards.newly(from: 24, to: 25) == [.trick(.roll)], "bond 25 unlocks the roll")
+precondition(Rewards.next(25)?.bond == 40 && Rewards.next(200) == nil, "the next unlock is always shown until the last")
+
+var care = Brain()
+care.tick(now: time(5, 9), idle: 0, locked: false)
+care.tick(now: time(5, 10), idle: 0, locked: true)
+care.tick(now: time(5, 10, 10), idle: 0, locked: false)                       // back from a 10-minute break
+precondition(care.takeTreat(idle: 30, r: 0.2, pick: 0) == nil, "the surprise waits until you are back at the keys")
+precondition(care.takeTreat(idle: 0, r: 0.2, pick: 0) == .heart && care.memory.bond == 2, "a break, then a heart: bond 2")
+precondition(care.takeTreat(idle: 0, r: 0.2, pick: 0) == nil, "one surprise per break")
+let plays = [time(5, 11), time(5, 11, 10), time(5, 11, 40), time(5, 12, 20), time(5, 13)].map {
+    care.played($0, chance: 0.1, r: 0.9, pick: 0) != nil }
+precondition(plays == [true, false, true, true, false], "play surprises: 30 minutes apart and 3 a day, got \(plays)")
+precondition(care.played(time(5, 14), chance: 0.5, r: 0.9, pick: 0) == nil, "most play brings no surprise")
+care.tick(now: time(5, 15), idle: 0, locked: true)
+care.tick(now: time(5, 15, 10), idle: 0, locked: false)
+precondition(care.takeTreat(idle: 0, r: 0.05, pick: 0) == .gift(.flower) && care.memory.gifts["flower"] == 1
+          && care.memory.giftToday == "flower", "a gift is kept and shown for the day")
+care.tick(now: time(6, 9), idle: 0, locked: false)
+precondition(care.memory.giftToday == "" && care.memory.playTreats == 0 && care.memory.gifts["flower"] == 1, "a new day: the collection stays")
+
+// learning: ignored nudges get rarer, down to a floor; answers bring them back
+var learn = Brain()
+precondition(learn.wants(.line, r: 0.99), "a new Bao says every line")
+for _ in 0..<6 { learn.answered(.line, false) }
+precondition(!learn.wants(.line, r: 0.45) && learn.wants(.line, r: 0.3), "6 ignored lines: Bao speaks 38% of the time")
+learn.answered(.line, true)
+precondition(learn.wants(.line, r: 0.45), "an answer brings them back")
+for _ in 0..<100 { learn.answered(.line, false) }
+precondition(learn.wants(.line, r: 0.24), "ignored lines never stop: one time in four")
+var eyes = Brain()
+var gazes: [Date] = []
+var at = time(9, 9)
+while at <= time(9, 10) {                                                     // working on, never looking away
+    eyes.tick(now: at, idle: 5, locked: false)
+    if eyes.decide(now: at, idle: 5).cue == .gaze { gazes.append(at) }
+    at = at.addingTimeInterval(15)
+}
+let gaps = zip(gazes.dropFirst(), gazes).map { $0.timeIntervalSince($1) }
+precondition(gaps.count >= 2 && gaps[1] > gaps[0] && eyes.rate(.gaze) < 1, "ignored eye-rest nudges come less often, got \(gaps)")
+print("rewards ok")
 
 print("brain ok:\(cues.count) cues in the last scene, bond \(b.memory.bond), level \(b.bondLevel)")

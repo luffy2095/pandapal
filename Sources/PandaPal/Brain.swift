@@ -5,6 +5,9 @@ enum Mood { case eating, wantsBreak, happy, napping }
 /// One-off moments the brain asks the panda to play.
 enum Cue: Equatable, Hashable { case gaze, lookAtYou, sip, sun, morning, sleepy, reunion, remind }
 
+/// Moments Bao starts that you may answer or ignore. Bao learns how often you answer each, and does the ignored ones less.
+enum Nudge: String { case line, gaze }
+
 struct Settings {
     var stretchMinutes: Double = 50      // screen time before it starts asking for a break
     var breakMinutes: Double = 5         // away this long is a real break
@@ -43,6 +46,10 @@ struct Memory: Codable {
     var temper = ""                     // Bao's mood today, and the day it was picked
     var temperDay = ""
     var reminders: [Reminder] = []
+    var gifts: [String: Int] = [:]      // how many of each gift Bao has found for you
+    var giftToday = ""                  // the gift beside Bao today
+    var playTreats = 0                  // surprises from play today, at most 3
+    var answers: [String: Double] = [:] // how often you answer each kind of nudge, from 0 to 1
 
     init() {}
 
@@ -64,14 +71,18 @@ struct Memory: Codable {
         temper = try c.decodeIfPresent(String.self, forKey: .temper) ?? ""
         temperDay = try c.decodeIfPresent(String.self, forKey: .temperDay) ?? ""
         reminders = try c.decodeIfPresent([Reminder].self, forKey: .reminders) ?? []
+        gifts = try c.decodeIfPresent([String: Int].self, forKey: .gifts) ?? [:]
+        giftToday = try c.decodeIfPresent(String.self, forKey: .giftToday) ?? ""
+        playTreats = try c.decodeIfPresent(Int.self, forKey: .playTreats) ?? 0
+        answers = try c.decodeIfPresent([String: Double].self, forKey: .answers) ?? [:]
     }
 }
 
 /// Pure behaviour: no UI, no clock of its own, so a test can run a whole day with made-up times.
 ///
-/// Rules it keeps: it never rewards screen time (bond comes only from breaks, eye rests and ending the
-/// night on time); it asks for a break only at a natural pause and escalates slowly, at most
-/// `maxAsksPerHour` times an hour; it never guilt-trips; it reads only presence, idle time and the clock.
+/// Rules it keeps: it never rewards screen time (bond comes from breaks, eye rests, ending the night on time,
+/// and at most 3 surprises a day from play); it asks for a break only at a natural pause and escalates slowly,
+/// at most `maxAsksPerHour` times an hour; it never guilt-trips; it reads only presence, idle time and the clock.
 struct Brain {
     var settings = Settings()
     var memory = Memory()
@@ -90,6 +101,9 @@ struct Brain {
     private var askTimes: [Date] = []
     private var lastCue: [Cue: Date] = [:]
     private var reunion = false
+    private(set) var careDue = false        // a break or an eye rest just happened; its surprise waits until you are back
+    private var lastPlayTreat: Date?
+    private var gazeAt: Date?               // Bao gazed to suggest an eye rest and is waiting to see if you take one
 
     var bondLevel: Int { memory.bond >= 25 ? 2 : memory.bond >= 10 ? 1 : 0 }
 
@@ -108,6 +122,8 @@ struct Brain {
                     happyUntil = now.addingTimeInterval(120)
                     lastEyeRest = now
                     lastWater = now
+                    careDue = true
+                    gazeAt = nil
                     askLevel = 0
                     levelSince = nil
                     if awayMinutes >= 15, (11..<16).contains(hour(now)) { memory.daylightDay = dayKey(now) }
@@ -126,6 +142,8 @@ struct Brain {
                 if now.timeIntervalSince(last) >= settings.eyeRestMinutes * 60 {   // it was due: a real eye rest
                     memory.eyeRestsToday += 1
                     if memory.eyeRestsToday % 3 == 0 { memory.bond += 1 }
+                    careDue = true
+                    if gazeAt != nil { answered(.gaze, true); gazeAt = nil }
                     changed = true
                 }
                 lastEyeRest = now
@@ -173,7 +191,11 @@ struct Brain {
         guard askLevel < 2 else { return (nil, notify) }  // no other moments while it is asking
 
         let h = hour(now)
-        if let last = lastEyeRest, now.timeIntervalSince(last) >= settings.eyeRestMinutes * 60, cooled(.gaze, 5, now) {
+        if let at = gazeAt, now.timeIntervalSince(at) >= 120 { answered(.gaze, false); gazeAt = nil }
+        // every 5 minutes while an eye rest is due, stretching to every 20 if you ignore it
+        if let last = lastEyeRest, now.timeIntervalSince(last) >= settings.eyeRestMinutes * 60,
+           cooled(.gaze, 5 / max(rate(.gaze), 0.25), now) {
+            gazeAt = now
             return fire(.gaze, now)
         }
         if waterDue(now), pause, cooled(.sip, 30, now) { return fire(.sip, now) }
@@ -218,8 +240,51 @@ struct Brain {
         return .eating
     }
 
-    /// Petting is a cute reaction only. It earns no bond, so the panda never rewards more screen time.
+    /// Petting makes the panda happy for a minute. Any bond from play comes only through `played`, capped each day.
     mutating func pet(_ now: Date) { happyUntil = now.addingTimeInterval(60) }
+
+    // MARK: surprises and learning
+
+    /// The surprise for a break or eye rest, once you are back at the keys. nil when none is waiting.
+    /// `r` and `pick` are random numbers from 0 up to 1.
+    mutating func takeTreat(idle: TimeInterval, r: Double, pick: Double) -> Treat? {
+        guard careDue, idle < 15 else { return nil }
+        careDue = false
+        return give(Rewards.roll(care: true, bond: memory.bond, r: r, pick: pick))
+    }
+
+    /// Petting, tickles and chat: a surprise one time in four, at most 3 a day and 30 minutes apart,
+    /// so play is a moment of fun and never a reason to stay at the screen.
+    mutating func played(_ now: Date, chance: Double, r: Double, pick: Double) -> Treat? {
+        guard memory.playTreats < 3, chance < 0.25, lastPlayTreat.map({ now.timeIntervalSince($0) >= 1800 }) ?? true else { return nil }
+        memory.playTreats += 1
+        lastPlayTreat = now
+        return give(Rewards.roll(care: false, bond: memory.bond, r: r, pick: pick))
+    }
+
+    private mutating func give(_ t: Treat) -> Treat {
+        switch t {
+        case .heart: memory.bond += 1
+        case .gift(let g):
+            memory.bond += 1
+            memory.gifts[g.rawValue, default: 0] += 1
+            memory.giftToday = g.rawValue
+        case .trick: break
+        }
+        return t
+    }
+
+    /// Each answer moves the rate a quarter of the way to 1, each ignored nudge a quarter of the way to 0.
+    mutating func answered(_ n: Nudge, _ yes: Bool) {
+        let old = rate(n)
+        memory.answers[n.rawValue] = old + 0.25 * ((yes ? 1 : 0) - old)
+    }
+
+    /// Starts at 1, so a new Bao is as chatty as before and learns from there.
+    func rate(_ n: Nudge) -> Double { memory.answers[n.rawValue] ?? 1 }
+
+    /// Whether to start an optional nudge now: always while you answer them, down to one time in four if you never do.
+    func wants(_ n: Nudge, r: Double) -> Bool { r < 0.25 + 0.75 * rate(n) }
 
     // MARK: helpers
 
@@ -255,6 +320,8 @@ struct Brain {
         memory.breaksToday = 0
         memory.longestStretchMinutes = 0
         memory.eyeRestsToday = 0
+        memory.giftToday = ""
+        memory.playTreats = 0
         return true
     }
 }

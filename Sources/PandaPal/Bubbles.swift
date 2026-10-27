@@ -11,6 +11,7 @@ final class BubbleView: NSView {
     var tailX: CGFloat = 30 { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
     var onHover: ((Bool) -> Void)?
+    private var pressed = false { didSet { needsDisplay = true } }     // darker while the button is down, like a button
 
     override func draw(_ dirtyRect: NSRect) {
         let body = NSRect(x: 1.5, y: Self.tail + 1.5, width: bounds.width - 3, height: bounds.height - Self.tail - 3)
@@ -22,13 +23,20 @@ final class BubbleView: NSView {
         tip.line(to: NSPoint(x: x + 5, y: body.minY + 2))
         tip.close()
         NSColor.labelColor.withAlphaComponent(0.8).setStroke()
-        NSColor.textBackgroundColor.setFill()
+        (pressed ? NSColor.textBackgroundColor.blended(withFraction: 0.18, of: .labelColor)! : NSColor.textBackgroundColor).setFill()
         for p in [tip, round] { p.lineWidth = 3; p.stroke() }    // the fills cover the inner half: a 1.5 pt outline
         round.fill()
         tip.fill()                                                // also hides the outline where tail meets body
     }
 
-    override func mouseDown(with event: NSEvent) { onClick?() }
+    override func mouseDown(with event: NSEvent) { pressed = onClick != nil }
+
+    /// Acts on release, and only if the pointer is still on the bubble.
+    override func mouseUp(with event: NSEvent) {
+        guard pressed else { return }
+        pressed = false
+        if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
+    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)

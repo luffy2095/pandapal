@@ -12,7 +12,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     lazy var bubble: SpeechBubble = {
         let b = SpeechBubble()
         b.anchor = self.panel
-        b.onClick = { [weak self] in self?.answer(b.text) }     // click a line to answer it
+        b.onClick = { [weak self] in self?.lineAnswered(); self?.answer(b.text) }     // click a line to answer it
         return b
     }()
     lazy var invite: TalkInvite = {
@@ -22,17 +22,20 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         c.bubble.onHover = { [weak self] inside in self?.hoverChanged(inside) }
         return c
     }()
-    var inviteHide: DispatchWorkItem?
     var breaksSeen = -1                 // to notice a break that just ended
     var reminderShown: Date?            // a reminder bubble waiting for your click, and how often it has waved since
     var reminderNudges = 0
+    var replying = false                // Bao is answering in the chat
+    var momentUntil = Date.distantPast  // Bao is playing a moment until then, and "talk?" waits
+    var lineWaiting = false             // one of Bao's own lines is showing: will you answer it?
+    var bondSeen = -1                   // to notice a new unlock
     var screenLocked = false
     var asleep = false
     var clumsyUntil: Date?
     var tip = 0
     var timer: Timer?
     var lifeTimer: Timer?
-    var panda: PandaShell = PandaApp.makeBody()
+    var panda: PandaShell = TextPandaView(frame: .zero)
     var panel: NSPanel!
     let store = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("PandaPal/memory.json")
@@ -70,12 +73,6 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         update()
     }
 
-    /// The text panda by default; the kawaii Lottie panda when chosen in the menu.
-    static var kawaii: Bool { UserDefaults.standard.string(forKey: "pandaStyle") == "kawaii" }
-    static func makeBody() -> PandaShell {
-        kawaii ? PandaView(frame: NSRect(origin: .zero, size: PandaView.size)) : TextPandaView(frame: .zero)
-    }
-
     /// A transparent floating panel holding the panda. Clicks on empty pixels pass through to whatever is behind.
     func makePanel() {
         panel = NSPanel(contentRect: NSRect(origin: .zero, size: panda.frame.size), styleMask: [.borderless, .nonactivatingPanel],
@@ -106,14 +103,9 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         body.onGesture = { [weak self] g in self?.gesture(g) }
         body.onHoverChanged = { [weak self] inside in self?.hoverChanged(inside) }
         body.contextMenu = menu
+        body.onMoment = { [weak self] seconds in self?.momentStarted(seconds) }
     }
 
-    @objc func toggleStyle() {
-        UserDefaults.standard.set(Self.kawaii ? "text" : "kawaii", forKey: "pandaStyle")
-        install(Self.makeBody())
-        update()
-        refreshPause()
-    }
 
     /// Animations run only while someone can see the panda.
     @objc func refreshPause() {
@@ -145,6 +137,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let before = brain.mood(now)
         if brain.tick(now: now, idle: idle, locked: screenLocked || asleep) { save() }
         let (cue, notify) = brain.decide(now: now, idle: idle)
+        let treat = brain.takeTreat(idle: idle, r: .random(in: 0..<1), pick: .random(in: 0..<1))   // after a break or eye rest
+        if let treat { save() }
         let mood = brain.mood(now)
         if mood == .wantsBreak && before != .wantsBreak {
             // water when it is due, otherwise the next of the other tips
@@ -163,12 +157,20 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         personality.temper = temper
         panda.temper = temper
         panda.show(mood)
+        panda.gift = Gift(rawValue: brain.memory.giftToday)
         if let cue, panel?.occlusionState.contains(.visible) == true { panda.cue(cue) }
+        if let treat, canBeSeen { panda.treat(treat) }
+        if lineWaiting, !bubble.isVisible {                 // the line faded and nobody answered it
+            lineWaiting = false
+            brain.answered(.line, false)
+        }
         // its own words at its moments
         if breaksSeen >= 0, brain.memory.breaksToday > breaksSeen {
-            say("The user just came back from a \(Int(brain.lastBreakMinutes))-minute break.")
+            var moment = "The user just came back from a \(Int(brain.lastBreakMinutes))-minute break."
+            if case .gift(let g)? = treat { moment += " You found a little \(g.rawValue) for them, and you give it to them now." }
+            say(moment)
         } else if mood == .wantsBreak, before != .wantsBreak {
-            say("You want the user to take a break now. Suggest this: \(tips[tip])")
+            say("You want the user to take a break now. Suggest this: \(tips[tip])", optional: false)
         }
         if brain.memory.temperDay != brain.memory.day {
             pickTemper(greet: cue == .morning)                 // once a day, and its first words come in that mood
@@ -187,11 +189,12 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         switch cue {
-        case .sleepy?: say("It is late at night. Encourage the user to wrap up and sleep.")
+        case .sleepy?: say("It is late at night. Encourage the user to wrap up and sleep.", optional: false)
         case .reunion?: say("The user is back after days away. You missed them.")
         default: break
         }
         breaksSeen = brain.memory.breaksToday
+        celebrate()
         if notify { sendNotification(tips[tip]) }
         let title = isClumsy(now, mood) ? "🐼💫" : faces[mood]!
         if item.button?.title != title { item.button?.title = title }     // redraw the menu bar only on change
@@ -204,7 +207,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let mood = brain.mood(now)
         let line: String
         switch mood {
-        case .eating: line = isClumsy(now, mood) ? "Oops. Panda tripped over its own paws." : (Self.kawaii ? "Working on its laptop beside you." : brain.stretchMinutes(now) >= 25 ? "Curled up asleep by its bamboo while you focus." : "Munching bamboo while you focus.")
+        case .eating: line = isClumsy(now, mood) ? "Oops. Panda tripped over its own paws." : (brain.stretchMinutes(now) >= 25 ? "Asleep on its side while you focus." : "Munching bamboo while you focus.")
         case .wantsBreak: line = "Panda wants to play. \(tips[tip])"
         case .happy: line = "Panda is happy to see you."
         case .napping: line = "Napping while you are away."
@@ -214,7 +217,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                      "Screen time without a break: \(Int(brain.stretchMinutes(now))) min",
                      "Breaks today: \(brain.memory.breaksToday)",
                      "Eye rests today: \(brain.memory.eyeRestsToday)",
-                     "Bond: \(brain.memory.bond)"] + (brain.memory.temper.isEmpty ? [] : ["Mood today: \(brain.memory.temper)"]) {
+                     "Bond: \(brain.memory.bond)" + nextUnlock()] + (brain.memory.temper.isEmpty ? [] : ["Mood today: \(brain.memory.temper)"])
+                     + (giftsFound().isEmpty ? [] : ["Gifts found: \(giftsFound())"]) {
             menu.addItem(NSMenuItem(title: text, action: nil, keyEquivalent: ""))
         }
         menu.addItem(.separator())
@@ -232,12 +236,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let hidden = UserDefaults.standard.bool(forKey: "pandaHidden")
         menu.addItem(withTitle: hidden ? "Show panda on screen" : "Hide panda from screen", action: #selector(toggleHidden), keyEquivalent: "").target = self
-        menu.addItem(withTitle: Self.kawaii ? "Switch to the text panda" : "Switch to the kawaii panda",
-                     action: #selector(toggleStyle), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        if Self.kawaii {
-            menu.addItem(NSMenuItem(title: "Art: Bhaskar Wary and Zakaria Harry Utomo, LottieFiles", action: nil, keyEquivalent: ""))
-        }
         menu.addItem(withTitle: "Quit PandaPal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
@@ -254,8 +253,53 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if [.pet, .hug, .highFive].contains(reaction) {
             brain.pet(now)
             update()
+            if bubble.isVisible { lineAnswered() }          // petting Bao while it speaks answers it too
         }
         panda.react(reaction)
+        if [.pet, .hug, .highFive, .giggle, .dance].contains(reaction) { play(now) }
+    }
+
+    /// Play sometimes brings a small surprise, shown once the reaction is over.
+    func play(_ now: Date) {
+        guard let t = brain.played(now, chance: .random(in: 0..<1), r: .random(in: 0..<1), pick: .random(in: 0..<1)) else { return }
+        save()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.panda.treat(t)
+            self?.celebrate()
+        }
+    }
+
+    /// Bond reached a new unlock: Bao shows off a new trick at once, or says it can find a new gift.
+    func celebrate() {
+        let bond = brain.memory.bond
+        defer { bondSeen = bond }
+        guard bondSeen >= 0, let u = Rewards.newly(from: bondSeen, to: bond).last else { return }
+        switch u {
+        case .trick(let t):
+            if canBeSeen { panda.treat(.trick(t)) }
+            say("You just learned a new trick: \(t.rawValue). Tell the user proudly.", optional: false)
+        case .gift(let g):
+            say("From now on you can find a new kind of gift for the user: a \(g.rawValue). Tell them, excited.", optional: false)
+        }
+    }
+
+    /// The menu names what the next unlock is, but not which one, so it stays a surprise.
+    func nextUnlock() -> String {
+        guard let n = Rewards.next(brain.memory.bond) else { return "" }
+        if case .trick = n.unlock { return " (a new trick at \(n.bond))" }
+        return " (a new gift at \(n.bond))"
+    }
+
+    func giftsFound() -> String {
+        Gift.allCases.compactMap { g in brain.memory.gifts[g.rawValue].map { "\(g.symbol) \($0)" } }.joined(separator: "   ")
+    }
+
+    /// You answered Bao's own line: it will keep saying lines like it.
+    func lineAnswered() {
+        guard lineWaiting else { return }
+        lineWaiting = false
+        brain.answered(.line, true)
+        save()
     }
 
     @objc func toggleHidden() {
@@ -320,17 +364,33 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSPoint(x: panel.frame.minX + panda.headPoint.x, y: panel.frame.minY + panda.headPoint.y)
     }
 
-    /// "talk?" appears above Bao while the pointer is near it, and lingers a moment so it can be reached.
-    func hoverChanged(_ inside: Bool) {
-        guard Companion.available, chat?.isVisible != true, !bubble.isVisible, panel != nil else { return }
-        inviteHide?.cancel()
-        if inside {
-            invite.show(head: head())
-        } else {
-            let work = DispatchWorkItem { [weak self] in self?.invite.orderOut(nil) }
-            inviteHide = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+    /// "talk?" steps aside while Bao plays a moment, and comes back after the last one if the pointer is still there.
+    func momentStarted(_ seconds: Double) {
+        let until = Date().addingTimeInterval(seconds)
+        guard until > momentUntil else { return }
+        momentUntil = until
+        invite.orderOut(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, let panel = self.panel, Date() >= self.momentUntil, panel.frame.contains(NSEvent.mouseLocation) else { return }
+            self.hoverChanged(true)
         }
+    }
+
+    /// "talk?" appears above Bao while the pointer is on the panda or on the bubble, and goes as soon as it is on neither.
+    func hoverChanged(_ inside: Bool) {
+        guard inside else {
+            // hide once the pointer is off both the panda and the bubble; checked a moment later, because moving
+            // up from the panda into the bubble leaves the one before it enters the other
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let p = NSEvent.mouseLocation
+                if self.panel?.frame.contains(p) != true, !self.invite.frame.contains(p) { self.invite.orderOut(nil) }
+            }
+            return
+        }
+        guard Companion.available, chat?.isVisible != true, !bubble.isVisible, panel != nil, Date() >= momentUntil else { return }
+        invite.show(head: head())
+        DispatchQueue.main.async { [weak self] in _ = self?.chatPanel() }   // after the bubble is on screen
     }
 
     func answer(_ line: String) {
@@ -339,15 +399,22 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         chat?.set(line)
     }
 
+    /// The chat window, made once. The first focus of its text field takes macOS about a second (measured 1.1 to 2.5 s),
+    /// so the "talk?" bubble makes it early, while the window is still hidden.
+    func chatPanel() -> ChatPanel {
+        if let chat { return chat }
+        let c = ChatPanel()
+        c.anchor = panel
+        c.onSend = { [weak self] text in self?.send(text) }
+        NotificationCenter.default.addObserver(self, selector: #selector(chatClosed), name: NSWindow.willCloseNotification, object: c)
+        NotificationCenter.default.addObserver(self, selector: #selector(chatLostFocus), name: NSWindow.didResignKeyNotification, object: c)
+        c.makeFirstResponder(c.input)
+        chat = c
+        return c
+    }
+
     @objc func openChat() {
-        let c = chat ?? {
-            let c = ChatPanel()
-            c.anchor = panel
-            c.onSend = { [weak self] text in self?.send(text) }
-            NotificationCenter.default.addObserver(self, selector: #selector(chatClosed), name: NSWindow.willCloseNotification, object: c)
-            chat = c
-            return c
-        }()
+        let c = chatPanel()
         companion.startChat(mood: Temper(rawValue: brain.memory.temper)) { [weak self] act in await self?.perform(act) ?? "" }
         invite.orderOut(nil)
         c.open(head: head(), reply: "Hi! Ask me anything, or ask me to remind you of something. (●ᴥ●)")
@@ -356,6 +423,9 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         c.makeFirstResponder(c.input)
         c.pop()
     }
+
+    /// A click outside the chat closes it, unless Bao is still answering: then the reply waits there and waves.
+    @objc func chatLostFocus() { if !replying { chat?.close() } }
 
     @objc func chatClosed() {
         companion.endChat()                   // the conversation is gone; nothing was saved
@@ -368,7 +438,9 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         chat.set("…")
         panda.thinking()
         let sent = Date()
+        replying = true
         Task { @MainActor in
+            defer { replying = false }
             var started = false
             _ = await companion.reply(to: text, face: face()) { [weak self] partial in
                 if !started { started = true; self?.panda.talking(true) }
@@ -379,16 +451,20 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 chat.nudge()
                 panda.cue(.remind)
             }
+            play(Date())                                                      // a chat is play too
         }
     }
 
     /// A short line in a speech bubble for one of the panda's moments, unless the chat is open or nobody can see it.
-    func say(_ moment: String) {
+    /// An `optional` line comes less often when you keep ignoring Bao's lines; break asks and bedtime are never optional.
+    func say(_ moment: String, optional: Bool = true) {
         guard Companion.available, canBeSeen, chat?.isVisible != true else { return }
+        if optional, !brain.wants(.line, r: .random(in: 0..<1)) { return }
         let ctx = context()
         Task { @MainActor in
             guard let line = await companion.line(for: moment, context: ctx, mood: personality.temper, face: face()) else { return }
             speak(line)
+            lineWaiting = optional
         }
     }
 
@@ -400,6 +476,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Bao's line in her bubble, mouth moving as it appears.
     func speak(_ line: String, seconds: Double = 9) {
+        lineWaiting = false                   // a new line replaces the one waiting for an answer
         bubble.show(line, head: head(), seconds: seconds)
         Task { @MainActor in
             panda.talking(true)
@@ -526,14 +603,8 @@ if let i = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.arguments.
 }
 
 if let i = CommandLine.arguments.firstIndex(of: "--snapshot") {
-    // Renders a few real frames of the art to PNGs and exits: a way to check it without a screen.
-    let dir = URL(fileURLWithPath: CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : ".")
-    let view = PandaView(frame: NSRect(origin: .zero, size: PandaView.size), engine: .mainThread)
-    for (anim, frame, name) in [(view.calm, 0.0, "working"), (view.calm, 45.0, "working-tongue"),
-                                (view.wave, 60.0, "wave"), (view.sleep, 30.0, "napping")] {
-        view.writePNG(anim, frame: frame, to: dir.appendingPathComponent("panda-\(name).png"))
-    }
-    TextPandaView.writeFrames(to: dir)
+    // Renders every frame of the art to PNGs and exits: a way to check it without a screen.
+    TextPandaView.writeFrames(to: URL(fileURLWithPath: CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : "."))
     exit(0)
 }
 
