@@ -22,7 +22,7 @@ A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on 
 
 ## Download
 
-1. Download `PandaPal-1.0.zip` from [the latest release](https://github.com/luffy2095/pandapal/releases/latest). It needs macOS 26 or later on Apple silicon.
+1. Download the `PandaPal` zip from [the latest release](https://github.com/luffy2095/pandapal/releases/latest). It needs macOS 26 or later on Apple silicon.
 2. Unzip it and move `PandaPal.app` to your Applications folder.
 3. Open it. PandaPal is free and not notarized by Apple, so macOS blocks the first open. Open System Settings, then Privacy & Security, scroll down, and click "Open Anyway" next to PandaPal. Or run this once in Terminal:
 
