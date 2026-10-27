@@ -105,14 +105,9 @@ precondition(cues.first == .reunion, "a happy reunion after days away, got \(cue
 // files saved by the older version still load
 let old = #"{"bond":5,"day":"2026-10-26","breaksToday":1,"longestStretchMinutes":3}"#
 let m = try! JSONDecoder().decode(Memory.self, from: Data(old.utf8))
-precondition(m.bond == 5 && m.eyeRestsToday == 0 && m.lastSeen == nil && m.reminders.isEmpty && m.temper == "", "older memory files still load")
-
-// reminders Bao says herself
-var rb = Brain()
-rb.memory.reminders = [Reminder(text: "Psst! Time to call mom.", at: time(2, 19)), Reminder(text: "Psst! Time to stretch.", at: time(2, 21))]
-precondition(rb.takeDue(time(2, 18, 59)).isEmpty, "nothing before its time")
-precondition(rb.takeDue(time(2, 19)).map(\.text) == ["Psst! Time to call mom."] && rb.memory.reminders.count == 1, "a due reminder is taken")
-precondition(rb.takeDue(time(2, 19, 1)).isEmpty, "and said only once")
+precondition(m.bond == 5 && m.eyeRestsToday == 0 && m.lastSeen == nil && m.temper == "", "older memory files still load")
+let withReminders = #"{"bond":7,"reminders":[{"text":"Psst!","at":814776593}]}"#
+precondition((try? JSONDecoder().decode(Memory.self, from: Data(withReminders.utf8)))?.bond == 7, "files from the chat version still load")
 
 
 // ---- personality ----
@@ -197,15 +192,41 @@ precondition((0..<6).allSatisfy { pick(6, 45, time(2, 18, 30), .playful, $0) == 
 precondition(pick(3, 70, time(2, 21), nil, 1) != pick(3, 70, time(2, 21), nil, 2), "the mood still changes between days")
 print("personality ok")
 
-// reminders asked for in the chat
-let r = { (h: Int?, m: Int?, n: Int?, at: Date) in Brain.reminderDate(hour: h, minute: m, inMinutes: n, now: at) }
-precondition(r(7, nil, nil, time(2, 17, 30)) == time(2, 19), "'at 7' at 17:30 means 19:00 today")
-precondition(r(7, 0, nil, time(2, 6, 0)) == time(2, 7), "'at 7' at 06:00 means 07:00")
-precondition(r(19, 15, nil, time(2, 20, 0)) == time(3, 19, 15), "a time already past today is tomorrow")
-precondition(r(7, nil, nil, time(2, 23, 0)) == time(3, 7), "'at 7' late at night is tomorrow morning")
-precondition(r(nil, nil, 20, time(2, 9)) == time(2, 9, 20), "in 20 minutes")
-precondition(r(nil, nil, nil, time(2, 9)) == nil && r(25, 0, nil, time(2, 9)) == nil, "no usable time: no reminder")
-print("reminders ok")
+// a video or a call: you are at the screen even without typing
+var v = Brain()
+v.tick(now: time(7, 9), idle: 0, locked: false)
+var vt = time(7, 9)
+while vt <= time(7, 9, 30) { v.tick(now: vt, idle: 400, locked: false, busy: true); vt = vt.addingTimeInterval(15) }
+v.tick(now: time(7, 9, 31), idle: 0, locked: false)
+precondition(v.memory.breaksToday == 0 && v.memory.eyeRestsToday == 0 && v.stretchMinutes(time(7, 9, 31)) >= 31,
+             "30 minutes of video is screen time, not a break or an eye rest")
+var caller = Brain()
+caller.tick(now: time(8, 9), idle: 0, locked: false)
+caller.tick(now: time(8, 10), idle: 20, locked: false)
+_ = caller.decide(now: time(8, 10), idle: 20)                                     // the morning hello is out of the way
+caller.tick(now: time(8, 10), idle: 20, locked: false)
+precondition(caller.decide(now: time(8, 10), idle: 20, inCall: true) == (nil, false), "quiet during a call")
+precondition(caller.decide(now: time(8, 10), idle: 20).cue == .lookAtYou, "after the call it asks at the next pause")
+var film = Brain()
+film.tick(now: time(9, 9), idle: 0, locked: false)
+_ = film.decide(now: time(9, 9), idle: 0)
+film.tick(now: time(9, 10), idle: 300, locked: false, busy: true)
+precondition(film.decide(now: time(9, 10), idle: 300).cue != .lookAtYou                  // 5 minutes without typing is no pause,
+          && film.decide(now: time(9, 10), idle: 300, watching: true).cue == .lookAtYou, "but during a long video it may still ask")
+print("presence ok")
+
+// words a script hands Bao with --say: one tidy line, never empty, never huge
+precondition(Words.said("  Build\nfinished!\u{07}  ") == "Build finished!", "newlines become spaces, control characters go")
+precondition(Words.said(" \n\t ") == nil, "nothing to say: no bubble")
+precondition(Words.said(String(repeating: "a", count: 500))?.count == 200, "at most 200 characters")
+precondition(Temper.allCases.allSatisfy { Words.mood[$0] != nil }, "a good morning for every mood")
+precondition(Words.tips[Words.nextTip(after: 0, waterDue: true, hour: 10)].act == .sip, "water first when it is due")
+let evening = (0..<40).reduce(into: [Int]()) { seen, _ in seen.append(Words.nextTip(after: seen.last ?? 0, waterDue: false, hour: 21)) }
+precondition(!evening.contains { [.sun, .sip].contains(Words.tips[$0].act) } && Set(evening).count == Words.tips.count - 2,
+             "every idea in turn, no daylight in the evening, water only when due")
+precondition((0..<40).reduce(into: [Int]()) { s, _ in s.append(Words.nextTip(after: s.last ?? 0, waterDue: false, hour: 12)) }
+                .contains { Words.tips[$0].act == .sun }, "daylight around noon")
+print("words ok")
 
 // surprises: care can bring a gift, a heart or a trick; play brings no gifts and is capped
 precondition(Rewards.roll(care: true, bond: 0, r: 0.05, pick: 0) == .gift(.flower), "a low roll after care is a gift")

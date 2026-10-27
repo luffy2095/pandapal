@@ -22,14 +22,7 @@ struct Settings {
     var reunionHours: Double = 48
 }
 
-/// A reminder Bao says herself when its time comes. Kept in the saved file until she has said it.
-struct Reminder: Codable, Equatable {
-    var text: String
-    var at: Date
-}
-
-/// The only thing saved to disk. No app names, no window titles, no history, and no typing except the
-/// reminders you ask Bao for, each kept only until she says it.
+/// The only thing saved to disk: counts and dates. No app names, no window titles, no history, and nothing you type.
 struct Memory: Codable {
     var bond = 0
     var day = ""
@@ -45,7 +38,6 @@ struct Memory: Codable {
     var lastDayEnd: Date?
     var temper = ""                     // Bao's mood today, and the day it was picked
     var temperDay = ""
-    var reminders: [Reminder] = []
     var gifts: [String: Int] = [:]      // how many of each gift Bao has found for you
     var giftToday = ""                  // the gift beside Bao today
     var playTreats = 0                  // surprises from play today, at most 3
@@ -70,7 +62,6 @@ struct Memory: Codable {
         lastDayEnd = try c.decodeIfPresent(Date.self, forKey: .lastDayEnd)
         temper = try c.decodeIfPresent(String.self, forKey: .temper) ?? ""
         temperDay = try c.decodeIfPresent(String.self, forKey: .temperDay) ?? ""
-        reminders = try c.decodeIfPresent([Reminder].self, forKey: .reminders) ?? []
         gifts = try c.decodeIfPresent([String: Int].self, forKey: .gifts) ?? [:]
         giftToday = try c.decodeIfPresent(String.self, forKey: .giftToday) ?? ""
         playTreats = try c.decodeIfPresent(Int.self, forKey: .playTreats) ?? 0
@@ -107,11 +98,12 @@ struct Brain {
 
     var bondLevel: Int { memory.bond >= 25 ? 2 : memory.bond >= 10 ? 1 : 0 }
 
-    /// Call every 15 seconds and on lock, unlock, sleep and wake. Returns true when `memory` changed.
+    /// Call every 15 seconds and on lock, unlock, sleep and wake. Returns true when `memory` changed. `busy`: a video
+    /// is playing or a call is on, so you are at the screen even without typing: neither a break nor an eye rest.
     @discardableResult
-    mutating func tick(now: Date, idle: TimeInterval, locked: Bool) -> Bool {
+    mutating func tick(now: Date, idle: TimeInterval, locked: Bool, busy: Bool = false) -> Bool {
         var changed = rollDay(now)
-        if !locked && idle < settings.idleSeconds {
+        if !locked && (idle < settings.idleSeconds || busy) {
             if let away = awaySince {
                 let awayMinutes = now.timeIntervalSince(away) / 60
                 if awayMinutes >= settings.breakMinutes {
@@ -138,7 +130,7 @@ struct Brain {
                 lastWater = now
                 if let seen = memory.lastSeen, now.timeIntervalSince(seen) >= settings.reunionHours * 3600 { reunion = true }
             }
-            if idle >= settings.eyeRestSeconds, let last = lastEyeRest {
+            if !busy, idle >= settings.eyeRestSeconds, let last = lastEyeRest {
                 if now.timeIntervalSince(last) >= settings.eyeRestMinutes * 60 {   // it was due: a real eye rest
                     memory.eyeRestsToday += 1
                     if memory.eyeRestsToday % 3 == 0 { memory.bond += 1 }
@@ -163,9 +155,10 @@ struct Brain {
     }
 
     /// Call right after `tick`. Picks at most one moment to play, and says whether to send the one notification.
-    mutating func decide(now: Date, idle: TimeInterval) -> (cue: Cue?, notify: Bool) {
-        guard awaySince == nil, stretchStart != nil else { return (nil, false) }
-        let pause = idle >= 15 && idle < 60              // a natural pause: you stopped typing for a moment
+    /// During a call it stays quiet. While a video plays there is no typing to pause, so any moment is a pause.
+    mutating func decide(now: Date, idle: TimeInterval, watching: Bool = false, inCall: Bool = false) -> (cue: Cue?, notify: Bool) {
+        guard awaySince == nil, stretchStart != nil, !inCall else { return (nil, false) }
+        let pause = idle >= 15 && (idle < 60 || watching)   // a natural pause: you stopped typing for a moment
         let today = dayKey(now)
         if reunion { reunion = false; memory.morningDay = today; return (.reunion, false) }
         if memory.morningDay != today {
@@ -207,25 +200,6 @@ struct Brain {
     func stretchMinutes(_ now: Date) -> Double {
         guard awaySince == nil, let start = stretchStart else { return 0 }
         return now.timeIntervalSince(start) / 60
-    }
-
-    /// When a reminder asked for in the chat fires: in `inMinutes`, or at the next `hour`:`minute`.
-    /// An hour from 1 to 11 may be read off a 12-hour clock, so "at 7" said at 17:30 means 19:00 today.
-    static func reminderDate(hour: Int?, minute: Int?, inMinutes: Int?, now: Date, calendar: Calendar = .current) -> Date? {
-        if let n = inMinutes, n > 0 { return now.addingTimeInterval(Double(n) * 60) }
-        guard let h = hour, (0...23).contains(h) else { return nil }
-        let m = min(max(minute ?? 0, 0), 59)
-        let today = (h >= 1 && h < 12 ? [h, h + 12] : [h])
-            .compactMap { calendar.date(bySettingHour: $0, minute: m, second: 0, of: now) }
-            .filter { $0 > now }.min()
-        return today ?? calendar.date(bySettingHour: h, minute: m, second: 0, of: calendar.date(byAdding: .day, value: 1, to: now)!)
-    }
-
-    /// Reminders whose time has come, taken out so that each is said once.
-    mutating func takeDue(_ now: Date) -> [Reminder] {
-        let due = memory.reminders.filter { $0.at <= now }
-        memory.reminders.removeAll { $0.at <= now }
-        return due
     }
 
     func waterDue(_ now: Date) -> Bool {

@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="PandaPal icon">
+</p>
+
 # PandaPal
 
-A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on long screen days, and it reminds you to rest your eyes, move, drink water and go to bed, by showing those needs as its own. Everything runs on your Mac.
+A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on long screen days, and it reminds you to rest your eyes, move, drink water and go to bed, by showing those needs as its own. No AI, no network, no account.
 
 <p align="center">
   <picture>
@@ -9,24 +13,24 @@ A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on 
   </picture>
 </p>
 
-- **Looks after you, gently.** Eye rests, breaks, water, daylight and bedtime. It asks at most twice an hour, and never while you type.
+- **Looks after you, gently.** Eye rests, breaks, water, daylight and bedtime, with 13 break ideas that Bao acts out. It asks at most twice an hour, never while you type, and stays quiet during calls.
 - **Has a personality.** Pet it, tickle it, wave at it, drag it around. It giggles, dances, gets dizzy, sulks and forgives, and it has a mood each day.
-- **Talks.** Chat with Bao through Apple's on-device model. It sets reminders and focus sessions for you.
-- **Rewards care, not screen time.** Bond, tricks and gifts come from breaks. Play has a small daily cap.
-- **Private and light.** No network, no account, one small file. About 0.06% CPU and 15 MB of memory, measured.
+- **Breathes with you.** A one-minute breathing exercise from its menu.
+- **Says what your scripts tell it.** `PandaPal --say "Tests passed!"` and Bao waves and says it.
+- **Rewards care, not screen time.** Bond, tricks and gifts come from breaks. Videos and calls do not count as breaks.
+- **Private and light.** No network, no account, one small file. About 0.14% CPU and 32 MB of memory, measured.
 
-## Quick start
+## Download
 
-Needs macOS 26 or later and the Xcode command line tools. The chat also needs Apple Intelligence.
+1. Download `PandaPal-1.0.zip` from [the latest release](https://github.com/luffy2095/pandapal/releases/latest). It needs macOS 26 or later on Apple silicon.
+2. Unzip it and move `PandaPal.app` to your Applications folder.
+3. Open it. PandaPal is free and not notarized by Apple, so macOS blocks the first open. Open System Settings, then Privacy & Security, scroll down, and click "Open Anyway" next to PandaPal. Or run this once in Terminal:
 
 ```sh
-git clone https://github.com/luffy2095/pandapal.git
-cd pandapal
-./build.sh
-open build/PandaPal.app
+xattr -dr com.apple.quarantine /Applications/PandaPal.app
 ```
 
-Bao appears at the bottom right of your screen. Hover over it and click "talk?", or right-click it for the menu.
+Bao appears at the bottom right of your screen. Right-click it, or click 🐼 in the menu bar, for the menu. To start PandaPal at login: System Settings, General, Login Items, then add PandaPal.
 
 <p align="center">
   <picture>
@@ -40,10 +44,10 @@ Bao appears at the bottom right of your screen. Hover over it and click "talk?",
 ## Using it
 
 - **Click** Bao to pet it.
-- **Drag** it anywhere. It remembers the spot.
+- **Drag** it anywhere. It remembers the spot, and if that spot ends up off every screen, it comes back to the bottom right.
 - **Tap, double-tap, tap fast, press and hold, drag, shake, tickle or wave** for its personality. The table under "Personality" lists every reaction.
-- **Hover** over it and click "talk?" to chat.
-- **Right-click** it, or click 🐼 in the menu bar, for the menu: talk to Bao, today's screen time, breaks and eye rests, bond and the next unlock, gifts found, today's mood, snooze break reminders for an hour, hide the panda, and quit.
+- **Click** one of its speech bubbles to put it away.
+- **The menu** shows today's screen time, breaks and eye rests, your bond and the next unlock, the gifts found and today's mood. It also has: pet the panda, breathe with Bao for a minute, snooze break reminders for an hour, hide the panda, size (small, normal or large), and quit.
 
 ## How it behaves
 
@@ -60,10 +64,18 @@ It shows your needs as its own, and it never rewards screen time.
 **How it asks for a break.** It escalates slowly and steps back as soon as you take one:
 
 1. At your next natural pause, 15 to 60 seconds without typing, it looks at you and stretches. No bubble.
-2. Ten minutes later it waves with a "break?" bubble, and the menu has a suggestion.
+2. Ten minutes later it waves and says a break idea in its bubble, and the menu has it too.
 3. Twenty minutes after that it sends one macOS notification. Then it stops asking.
 
 It asks at most twice an hour, never interrupts while you type, and "Snooze break reminders for 1 hour" in its menu silences it for meetings.
+
+**Break ideas.** Bao suggests one of 13 and acts it out while it waits: stretch, look far away, drink water, step into daylight, roll your shoulders, tilt your head, shake out your wrists, rest your eyes under your palms, blink slowly, take a short walk, breathe, reach up high, or have a snack. Water comes first when it is due, and daylight only between 8:00 and 18:00.
+
+**Calls and videos.** While some app uses the camera or records the microphone, you are probably on a call. Bao stays quiet then: none of its own lines, no break asks, no notifications, and no idle quirks, in case you share your screen. Words from your scripts still show. While a video plays, macOS keeps the display awake. Bao reads both, so a call or a video counts as screen time, not as a break or an eye rest, even when you do not type. Some tools, such as `caffeinate`, keep the display awake all day, so after 45 minutes without a key or a click, Bao assumes you have left.
+
+**Breathe with Bao.** Choose "Breathe with Bao (1 minute)" in the menu. Bao closes its eyes and swells as you breathe in for 4 seconds, holds for 4, and settles as you breathe out for 4, with "in", "hold" and "out" beside it. After five breaths it is happy with you. A tap ends it early.
+
+**Its own words.** After you come back from a break, when it asks for one, on your first visit in the morning (in its mood of the day), late at night, after days away, when it finds a gift, and when it learns a trick, Bao says a short line in its bubble. The lines are written by hand, and each moment picks one at random. At most four lines an hour. Bao learns from you: a line you click, or answer with a pet, keeps it chatty, and each line you ignore makes the next one less likely, down to one time in four. Its eye-rest nudge learns the same way, from every 5 minutes up to every 20 if you ignore it. Break asks and bedtime lines never come less often.
 
 **Bond.** It grows from care: each break, every third eye rest, and locking the screen during the wind-down hour. There are no streaks, the bond never drops, and higher bond unlocks behaviour, not points:
 
@@ -74,11 +86,11 @@ It asks at most twice an hour, never interrupts while you type, and "Snooze brea
 **Surprises.** You never know what comes, which keeps them fun:
 
 - After each break and each eye rest that was due, once you are back: a trick it knows, a heart (one more bond) one time in four, or a gift one time in ten. A gift sits beside Bao for the rest of the day `✿`, and the menu counts the gifts you have found. Newer gifts are rarer.
-- Play brings surprises too. A pet, hug, high five, giggle, dance or chat brings a trick or a heart one time in four, at most 3 a day and 30 minutes apart, and never a gift. Gifts stay the reward for care, so play is a moment of fun and never a reason to stay at the screen.
+- Play brings surprises too. A pet, hug, high five, giggle or dance brings a trick or a heart one time in four, at most 3 a day and 30 minutes apart, and never a gift. Gifts stay the reward for care, so play is a moment of fun and never a reason to stay at the screen.
 
-**Everyday life.** While you work it munches bamboo, blinks, and glances toward your pointer. Now and then it sneezes a little spray, hiccups, drops its bamboo, blows a bubble that pops, watches a bamboo leaf drift down, or gets a visit from a butterfly that rests between its ears. It never does these while it asks for a break or while you focus. After 25 minutes of focus it puts its bamboo down and sleeps on its side, so only its z's move while you work. It says good morning on your first visit before noon. While you are away it yawns, lies down on its side and naps, with growing z's. After two days or more away it greets you with a big reunion.
+**Everyday life.** While you work it munches bamboo, blinks, and glances toward your pointer. Now and then it sneezes a little spray, hiccups, drops its bamboo, blows a bubble that pops, watches a bamboo leaf drift down, or gets a visit from a butterfly that rests between its ears. It never does these while it asks for a break, while you focus, or during a call. After 25 minutes of focus it puts its bamboo down and sleeps on its side, so only its z's move while you work. While you are away it yawns, lies down on its side and naps, with growing z's. After two days or more away it greets you with a big reunion.
 
-**Mood of the day.** Each morning Bao picks a mood from how your last day went: curious on its first day; sleepy or grumpy after a late night or long stretches without a break; playful or cuddly after a day with plenty of breaks. It never repeats yesterday's mood when another fits. The mood tunes its rules (grumpy goes shy after 8 taps instead of 12 and pouts sooner, playful giggles at a double tap, cuddly hugs when tapped, curious notices your pointer more often, sleepy ignores it), a third of its idle moments show it, and its words carry it. A rule picks the mood, not the model: asked to choose, Apple's model contradicted the facts in 6 of 8 tries. The menu shows today's mood.
+**Mood of the day.** Each morning Bao picks a mood from how your last day went: curious on its first day; sleepy or grumpy after a late night or long stretches without a break; playful or cuddly after a day with plenty of breaks. It never repeats yesterday's mood when another fits. The mood tunes its rules (grumpy goes shy after 8 taps instead of 12 and pouts sooner, playful giggles at a double tap, cuddly hugs when tapped, curious notices your pointer more often, sleepy ignores it), a third of its idle moments show it, and it says good morning in it. The menu shows today's mood.
 
 **Personality.** It is curious, ticklish, a bit shy, sassy when pestered, a grump when woken, and quick to forgive.
 
@@ -99,47 +111,61 @@ It asks at most twice an hour, never interrupts while you type, and "Snooze brea
 | tap while it naps | one eye opens `(-ᴥ•)`; 3 quick taps wake it |
 | tap while it wants a break | cheers you on `\(●ᴥ●)/ go!` |
 
-Play earns bond only through its capped surprises. Its patience refills within a couple of minutes. While Bao plays a moment, the "talk?" bubble steps aside, and it comes back afterwards if your pointer is still there.
+Play earns bond only through its capped surprises. Its patience refills within a couple of minutes.
 
-## Talk to it
+## Make Bao say things
 
-Bao talks through Apple's on-device model. It runs entirely on your Mac, with no network, no account and no API key. It needs Apple Intelligence switched on.
+Any script can hand Bao the words to say:
 
-- **Chat:** move the pointer over the panda and click the "talk?" bubble above its head. The bubble goes as soon as the pointer leaves the panda and the bubble. You can also click one of its own lines to answer it, or choose "Talk to Bao…" in the menu. Replies type out while its mouth moves. A click outside the chat closes it, unless Bao is still answering. Closing the chat ends the conversation, and nothing is saved.
-- **What it can do:** ask it anything, and it answers from what the model knows. It can also set a reminder ("remind me to call mom at 7"), start a focus session ("I need to focus for 45 minutes"), pause its break reminders ("stop bugging me for an hour"), tell you how your day is going, tell you the time and date, and open the Weather app. Bao delivers reminders herself: at the time, she waves and says it in her bubble, which stays until you click it, and the end of a focus session works the same way. If nobody can see her then (the panda is hidden, a full-screen app covers it, or the screen is locked), a macOS notification carries the reminder instead, so none is missed. Reminders wait in the saved file, so a restart keeps them; if PandaPal is not running at the time, she says it when it next starts. Each action shows a ✓ line under the reply that says exactly what was done and when, or a ✗ line if it could not be done. It cannot look up live things such as weather, news or prices, because it runs offline.
-- **Speed:** each message is one call to the model. Bao's actions are tools the model calls by itself during that call, at most one per reply. The chat window is prepared when the "talk?" bubble appears, so it opens at once. The model starts loading when you open the chat, so the first reply is the slowest. When your Mac is very low on memory, macOS pauses the model, and Bao says so.
-- **Its own words:** after you come back from a break, when it asks for one, on your first visit in the morning, and late at night, it says a short line in a speech bubble. At most four an hour, and never while the chat is open. Bao learns from you: a line you click, or answer with a pet, keeps it chatty, and each line you ignore makes the next one less likely, down to one time in four. Its eye-rest nudge learns the same way, from every 5 minutes up to every 20 if you ignore it. Break asks and bedtime lines never come less often.
-- **What it knows:** what you type in the open chat, plus, only when you ask, the time and date, and your screen time since the last break, today's breaks and eye rests, and your longest stretch today. It cannot see your screen, apps or files.
-- **How it speaks:** in the chat, usually one to three short sentences. In its bubble, one short line. Each ends with exactly one face that the app chooses from its mood. It is a friend, not a therapist.
-- **Test it from the terminal:** `open -n -W --stdout out.txt build/PandaPal.app --args --ask "hi" "remind me to stretch in 10 minutes"` asks each message in one chat and prints the replies, their timing and any action, without doing the action. `--ask --moment "The user just came back from a break."` asks for a bubble line. It goes through `open` because macOS lets apps use the model, and a plain terminal process may be refused.
+```sh
+/Applications/PandaPal.app/Contents/MacOS/PandaPal --say "Tests passed!"
+```
+
+Bao waves and says it in its bubble, which stays until you click it and waves again each minute, 3 times at most. When nobody can see Bao (it is hidden, a full-screen app covers it, or the screen is locked), a macOS notification titled "Bao says" carries the words instead. Bao says the words exactly as given, on one line, up to 200 characters, and saves nothing. The command exits with 0 when the words were sent, 1 when PandaPal is not running, and 2 when there is nothing to say.
+
+For example, with an alias in your shell profile:
+
+```sh
+alias bao='/Applications/PandaPal.app/Contents/MacOS/PandaPal --say'
+make test && bao "Tests passed!" || bao "Tests failed. Hmph."
+```
+
+## Build from source
+
+Needs macOS 26 or later and the Xcode command line tools with the macOS 26 SDK or newer (Swift 6.2+).
+
+```sh
+git clone https://github.com/luffy2095/pandapal.git
+cd pandapal
+./build.sh                      # runs the behaviour tests, then builds build/PandaPal.app
+open build/PandaPal.app
+```
+
+It builds with `swiftc` directly, not the Swift package manager, because the package manager in Command Line Tools 27.0 cannot build manifests on this Mac.
 
 ## Privacy
 
-- It reads three things: whether the screen is locked or asleep, how many seconds since the last key or mouse event, and the clock. During its moments it also reads where the pointer is, to glance that way, and keeps nothing. It never sees what you type outside its chat, which app you use, or what is on screen.
-- It needs no permissions and makes no network connections. Bao's words come from Apple's on-device model, so they are generated on this Mac too. Chats are kept in memory only while the chat is open.
-- The only permission it may ask for is notifications, once, the first time it sends its break notification or a reminder you asked for.
-- It saves one small file, `~/Library/Application Support/PandaPal/memory.json`: bond, today's date, today's breaks and eye rests, longest stretch today, which daily moments already happened, when it last saw you, the same counts for your last day, today's mood, any reminders you asked for (each deleted once Bao says it), how many of each gift it found, today's gift and play surprises, and two numbers for how often you answer its lines and eye-rest nudges.
+- It reads: whether the screen is locked or asleep, how many seconds since the last key or mouse event, and the clock. It also reads whether some app is using a camera or recording a microphone, and whether some app keeps the display awake. macOS answers each of these with only on or off, with no permission and nothing about who you talk to or what you watch. During its moments it reads where the pointer is, to glance that way, and keeps nothing. It never sees what you type, which app you use, or what is on screen.
+- It needs no permissions, makes no network connections, and has no AI.
+- The only permission it may ask for is notifications, once, the first time it sends its break notification or shows words from a script while nobody can see it.
+- It saves one small file, `~/Library/Application Support/PandaPal/memory.json`: bond, today's date, today's breaks and eye rests, longest stretch today, which daily moments already happened, when it last saw you, the same counts for your last day, today's mood, how many of each gift it found, today's gift and play surprises, and two numbers for how often you answer its lines and eye-rest nudges. Its size and spot on screen are kept in its preferences.
 
 ## Saving power
 
 - Animations play in short moments, then the panda holds still, which costs nothing. Effects such as hearts and sparkles run in Core Animation and remove themselves when they end.
 - Everything pauses while the panda is covered, hidden, or the screen is locked.
+- Its checks for calls and videos take 0.073 ms and 0.116 ms, once every 15 seconds. Run alone for 3 minutes, they used 0.032% CPU, start-up included.
 
 Measured on macOS 27, Apple silicon, with the full behaviour engine ticking every 15 seconds:
 
 | What | Result | Date |
 |---|---|---|
-| CPU, panda visible and working, 3-minute average | 0.056% | 2026-10-26 |
-| Memory footprint, one minute after launch | 15 MB | 2026-10-27 |
-| App size | 604 KB | 2026-10-27 |
+| CPU, panda visible, after it warmed up, 3-minute average | 0.144% | 2026-10-27 |
+| Memory footprint, just after launch | 16 MB | 2026-10-27 |
+| Memory footprint, once its frames are drawn and kept | 32 MB | 2026-10-27 |
+| App size, with its icon | 600 KB | 2026-10-27 |
 
-The window compositor's share is not measured yet. It needs `powermetrics` on an otherwise idle screen. The chat uses Apple's model service, which macOS shares between all Apple Intelligence features.
-
-## Build details
-
-It builds with `swiftc` directly, not the Swift package manager, because the package manager in Command Line Tools 27.0 cannot build manifests on this Mac. It needs the macOS 26 SDK or newer (Swift 6.2+). `./build.sh` runs the behaviour tests first, then builds `build/PandaPal.app`.
-
-To start PandaPal at login: System Settings, General, Login Items, then add `build/PandaPal.app`.
+The window compositor's share is not measured yet. It needs `powermetrics` on an otherwise idle screen.
 
 ## How it is made
 
@@ -148,12 +174,14 @@ The panda needs no art files. Each frame is three lines of Menlo, drawn to an im
 - `Sources/PandaPal/Brain.swift`: needs, the break escalation, bond, surprises and daily rhythm, with no UI, so a test can run a whole day with made-up times.
 - `Sources/PandaPal/Personality.swift`: how it reacts to taps, holds, drags, tickles, waves and hovers, and its mood of the day.
 - `Sources/PandaPal/Rewards.swift`: the surprises, their odds, and what each bond level unlocks.
-- `Sources/PandaPal/Companion.swift`: Bao's voice from Apple's on-device model, and its tools.
-- `Sources/PandaPal/Bubbles.swift`: the speech-bubble shape, and the talk invite, Bao's lines and the chat that use it.
+- `Sources/PandaPal/Words.swift`: Bao's hand-written lines and break ideas, and the tidying of words from `--say`.
+- `Sources/PandaPal/Presence.swift`: the on-or-off checks for calls and videos.
+- `Sources/PandaPal/Bubbles.swift`: the speech bubble.
 - `Sources/PandaPal/PandaShell.swift`: the panda's mouse handling: petting, dragging, tickles, waves, hover and the menu.
-- `Sources/PandaPal/TextPandaView.swift`: the panda, its frames and its effects.
-- `Sources/PandaPal/main.swift`: the menu bar, the floating window, system events and the saved file.
-- `Tests/main.swift`: the behaviour, personality and reward tests, run by `build.sh`.
+- `Sources/PandaPal/TextPandaView.swift`: the panda, its frames, its effects and its breathing.
+- `Sources/PandaPal/main.swift`: the menu bar, the floating window, system events, `--say`, and the saved file.
+- `Tests/main.swift`: the behaviour, personality, reward and word tests, run by `build.sh`.
+- `Resources/AppIcon.icns`: the app icon, made from `docs/icon.png`.
 - `./build/PandaPal.app/Contents/MacOS/PandaPal --snapshot <dir>` renders every frame and each gift to PNG, to check the art without a screen.
 
 ## License

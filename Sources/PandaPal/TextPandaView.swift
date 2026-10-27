@@ -10,7 +10,7 @@ final class TextPandaView: PandaShell {
         case eat, chomp, blink, lookL, lookR, sneeze1, sneeze2, hiccup, drop1, drop2,
              wave1, wave2, stretch1, stretch2, sip1, sip2, hi, happy1, happy2, yawn1, yawn2, curl, nap1, nap2, nap3, pet, oops,
              gaze, sun, hi5, giggle1, giggle2, dizzy, shy, angry1, angry2, pout, hug, dangle1, dangle2, curiousL, curiousR, grumble, cheer,
-             think, talk1, talk2, tide1, tide2, tide3, juggle1, juggle2
+             talk1, talk2, calm, lookFar, shake1, shake2, tide1, tide2, tide3, juggle1, juggle2
     }
 
     /// Each frame, line by line. Raw strings keep the backslashes literal.
@@ -54,9 +54,12 @@ final class TextPandaView: PandaShell {
         .curiousL:  [" ●   ● ?", " (◐ᴥ◐)", #" /(_)\"#],
         .curiousR:  [" ●   ● ?", " (◑ᴥ◑)", #" /(_)\"#],
         .cheer:     [" ●   ●  go!", #"\(●ᴥ●)/"#, "  (_)"],
-        .think:     [" ●   ●  …", " (•ᴥ•)", #" /(_)\"#],
         .talk1:     [" ●   ●", " (●ᴥ●)", #" /(_)\"#],
         .talk2:     [" ●   ●", " (●o●)", #" /(_)\"#],
+        .calm:      [" ●   ●", " (-ᴥ-)", #" /(_)\"#],                 // eyes closed: breathing, blinking
+        .lookFar:   [" ●   ●  ~", " (◔ᴥ◔)", #" /(_)\"#],              // looking far away
+        .shake1:    [" ●   ●", #"\(●ᴥ●)/"#, "  (_)"],                 // shaking out its paws
+        .shake2:    [" ●   ●", #"/(●ᴥ●)\"#, "  (_)"],
         .tide1:     [" ●   ●", "~(ᵔᴥᵔ~)", "  (_)"],                // the tide dance: both arms flow over to the left,
         .tide2:     [" ●   ●", #"\(ᵔᴥᵔ)/"#, "  (_)"],              // up as the wave passes,
         .tide3:     [" ●   ●", "(~ᵔᴥᵔ)~", "  (_)"],                 // and over to the right
@@ -118,9 +121,17 @@ final class TextPandaView: PandaShell {
         return NSSize(width: CGFloat(cols) * cellWidth + pad * 2, height: CGFloat(rows) * lineHeight + pad * 2)
     }()
 
+    /// Bao's size from the menu: 0.75, 1 or 1.3. Everything is drawn at size 1 and the stage scales it.
+    static var scale: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "pandaScale")
+        return saved > 0 ? saved : 1
+    }()
+    /// Pixels per point in the frame images: Retina, and more when Bao is large, so text stays sharp.
+    static var density: CGFloat { 2 * max(1, scale) }
+
     /// Draws every character centred in its own grid cell, like a terminal.
     static func render(_ lines: [String], dark: Bool) -> CGImage {
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * density), pixelsHigh: Int(size.height * density),
                                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         rep.size = size
@@ -161,15 +172,15 @@ final class TextPandaView: PandaShell {
         guard let l = lying[f] else { return render(art[f]!, dark: dark) }
         // the upright panda fills columns 1 to 5 of the grid; take them with a little of the rim around them
         let body = render(l.body, dark: dark)
-            .cropping(to: CGRect(x: (pad + cellWidth - 3) * 2, y: 0, width: (5 * cellWidth + 6) * 2, height: size.height * 2))!
-        let w = CGFloat(body.width) / 2, h = CGFloat(body.height) / 2
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+            .cropping(to: CGRect(x: (pad + cellWidth - 3) * density, y: 0, width: (5 * cellWidth + 6) * density, height: size.height * density))!
+        let w = CGFloat(body.width) / density, h = CGFloat(body.height) / density
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * density), pixelsHigh: Int(size.height * density),
                                    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         let ctx = NSGraphicsContext.current!.cgContext
-        ctx.scaleBy(x: 2, y: 2)
+        ctx.scaleBy(x: density, y: density)
         ctx.draw(render(l.over, dark: dark), in: CGRect(origin: .zero, size: size))
         ctx.translateBy(x: pad + h / 2, y: w / 2)                     // turned, it is h wide and w tall, on the ground
         ctx.rotate(by: .pi / 2)
@@ -200,25 +211,31 @@ final class TextPandaView: PandaShell {
     var deepFocus: Bool { mood == .eating && focusMinutes >= 25 }
 
     /// The top of the face "(●ᴥ●)", which fills columns 1 to 5 of the grid.
-    override var headPoint: NSPoint { NSPoint(x: Self.pad + 3.5 * Self.cellWidth, y: bounds.maxY - Self.pad) }
+    override var headPoint: NSPoint { NSPoint(x: (Self.pad + 3.5 * Self.cellWidth) * Self.scale, y: bounds.maxY - Self.pad * Self.scale) }
+
+    /// Everything Bao draws, at size 1, scaled to its size as one piece.
+    let stage = CALayer()
 
     override init(frame: NSRect) {
-        super.init(frame: NSRect(origin: frame.origin, size: Self.size))
+        super.init(frame: NSRect(origin: frame.origin, size: NSSize(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)))
         wantsLayer = true
+        stage.anchorPoint = .zero
+        stage.bounds = CGRect(origin: .zero, size: Self.size)
+        stage.position = .zero
+        stage.setAffineTransform(CGAffineTransform(scaleX: Self.scale, y: Self.scale))
+        layer!.addSublayer(stage)
         holder.bounds = CGRect(origin: .zero, size: Self.size)
         holder.anchorPoint = CGPoint(x: 0.5, y: 0)
         holder.position = CGPoint(x: Self.size.width / 2, y: 0)
-        layer!.addSublayer(holder)
-        face.frame = holder.bounds
-        face.contentsScale = 2
+        stage.addSublayer(holder)
+        for l in [face, giftLayer, sayLayer] {
+            l.frame = holder.bounds
+            l.contentsScale = Self.density
+        }
         holder.addSublayer(face)
-        giftLayer.frame = holder.bounds
-        giftLayer.contentsScale = 2
-        layer!.addSublayer(giftLayer)
-        sayLayer.frame = holder.bounds
-        sayLayer.contentsScale = 2
+        stage.addSublayer(giftLayer)
         sayLayer.opacity = 0
-        layer!.addSublayer(sayLayer)
+        stage.addSublayer(sayLayer)
         dark = isDark
         applyPose()
     }
@@ -257,7 +274,6 @@ final class TextPandaView: PandaShell {
         a.duration = step * Double(frames.count)
         a.repeatCount = repeats
         face.add(a, forKey: key)
-        if key == "burst" { onMoment?(a.duration * Double(repeats)) }
     }
 
     /// A long still frame with a quick blink at the end, looping.
@@ -319,7 +335,7 @@ final class TextPandaView: PandaShell {
 
     /// A moment for the current mood, a few seconds long, then back to its loop.
     override func burst() {
-        guard !paused else { return }
+        guard !paused, !breathing else { return }
         if dozing != deepFocus { applyPose() }        // just entered or left deep focus
         switch mood {
         case .eating where dozing:
@@ -354,13 +370,33 @@ final class TextPandaView: PandaShell {
                 move("transform.translation.y", [0, 4, 0, 0, 0, 4, 0], 2)
             default: flip([.drop1, .drop2, .drop2, .drop1, .eat], step: 0.6)
             }
-        case .wantsBreak:
-            if waterTip {
-                flip([.sip1, .sip2, .sip1, .sip2, .sip1], step: 0.6)
-            } else {
-                flip([.stretch1, .stretch2, .stretch1, .stretch2], step: 0.6)
+        case .wantsBreak:                             // acts out the break idea it suggested
+            switch tipAct {
+            case .stretch: flip([.stretch1, .stretch2, .stretch1, .stretch2], step: 0.6)
+            case .gaze: flip([.lookFar, .lookFar, .lookFar, .lookFar, .calm], step: 0.8)
+            case .sip: flip([.sip1, .sip2, .sip1, .sip2, .sip1], step: 0.6)
+            case .sun: flip([.sun, .sun, .sun, .hi], step: 0.7)
+            case .shoulders:
+                flip([.stretch1, .talk1, .stretch1, .talk1], step: 0.5)
+                move("transform.rotation.z", [0, 0.06, 0, -0.06, 0], 2)
+            case .neck:
+                flip([.calm, .calm, .calm, .calm], step: 0.6)
+                move("transform.rotation.z", [0, 0.14, 0, -0.14, 0], 2.4)
+            case .wrists:
+                flip([.shake1, .shake2, .shake1, .shake2, .shake1, .shake2, .shake1, .shake2], step: 0.15)
+                move("transform.translation.x", [0, -2, 2, -2, 2, -2, 2, 0], 1.2)
+            case .palms: flip([.shy, .shy, .shy, .shy, .hi], step: 0.8)
+            case .blink: flip([.calm, .talk1, .calm, .talk1, .calm, .talk1], step: 0.5)
+            case .walk:
+                flip([.wave1, .wave2, .wave1, .wave2, .wave1, .wave2], step: 0.3)
+                move("transform.translation.x", [0, -8, 0, 8, 0], 1.8)
+            case .breathe: breathe(cycles: 1)
+            case .reach:
+                flip([.stretch2, .stretch2, .stretch2, .talk1], step: 0.6)
+                move("transform.scale.y", [0, 0.08, 0.08, 0], 2.4)
+            case .snack: flip([.eat, .chomp, .eat, .chomp, .eat, .chomp], step: 0.35)
             }
-            move("transform.translation.y", [0, 6, 0, 6, 0], 1.2)
+            if ![.breathe, .neck, .wrists, .walk].contains(tipAct) { move("transform.translation.y", [0, 6, 0, 6, 0], 1.2) }
         case .happy:
             move("transform.translation.y", lastBreakMinutes >= 30 ? [0, 9, 0, 7, 0, 5, 0] : [0, 5, 0], 1.2)
         case .napping:
@@ -370,7 +406,7 @@ final class TextPandaView: PandaShell {
 
     /// A short scene for each moment the brain picks.
     override func cue(_ cue: Cue) {
-        guard !paused else { return }
+        guard !paused, !breathing else { return }
         switch cue {
         case .gaze: flip([.gaze, .gaze, .gaze, .gaze, .blink, .eat], step: 0.8)
         case .lookAtYou:
@@ -394,6 +430,7 @@ final class TextPandaView: PandaShell {
     /// How it answers your mouse. The personality picks the reaction; this plays it.
     override func react(_ r: Reaction) {
         guard !paused else { return }
+        if breathing { stopBreathing() }                  // a tap ends the breathing
         switch r {
         case .pet: pet()
         case .highFive:
@@ -476,8 +513,6 @@ final class TextPandaView: PandaShell {
         }
     }
 
-    override func thinking() { flip([.think], step: 1, repeats: .infinity, key: "talk") }
-
     override func talking(_ on: Bool) {
         if on { flip([.talk1, .talk2], step: 0.18, repeats: .infinity, key: "talk") }
         else { face.removeAnimation(forKey: "talk") }
@@ -491,7 +526,8 @@ final class TextPandaView: PandaShell {
     }
 
     private func motes(_ list: [Mote]) {
-        guard !paused, let root = layer else { return }
+        guard !paused else { return }
+        let root = stage
         var made: [CALayer] = []
         CATransaction.begin()
         CATransaction.setCompletionBlock { made.forEach { $0.removeFromSuperlayer() } }
@@ -503,7 +539,7 @@ final class TextPandaView: PandaShell {
             l.fontSize = m.size
             l.foregroundColor = m.color.cgColor
             l.alignmentMode = .center
-            l.contentsScale = window?.backingScaleFactor ?? 2
+            l.contentsScale = (window?.backingScaleFactor ?? 2) * Self.scale
             l.bounds = CGRect(x: 0, y: 0, width: m.size * CGFloat(m.text.count + 1), height: m.size * 1.3)
             l.position = m.path[0]
             l.opacity = 0
@@ -538,7 +574,6 @@ final class TextPandaView: PandaShell {
             l.add(g, forKey: "mote")
         }
         CATransaction.commit()
-        onMoment?(list.map { $0.delay + $0.duration }.max() ?? 0)
     }
 
     /// A point on the panda's grid: `col` columns from the left, `y` points up from the bottom.
@@ -630,6 +665,52 @@ final class TextPandaView: PandaShell {
         a.keyTimes = [0, 0.08, 0.85, 1]
         a.duration = seconds
         sayLayer.add(a, forKey: "say")
+    }
+
+    /// Breathing together: its body swells as you breathe in for 4 seconds, holds for 4, and settles as you breathe
+    /// out for 4, with the word beside it. At the end it is happy with you.
+    private var breathEnd: Date?
+    private var breathing: Bool { breathEnd.map { Date() < $0 } ?? false }
+
+    override func breathe(cycles: Int) {
+        guard !paused, cycles > 0 else { return }
+        let cycle = 12.0, total = cycle * Double(cycles)
+        breathEnd = Date().addingTimeInterval(total)
+        face.removeAnimation(forKey: "burst")
+        flip([.calm], step: total, key: "breathe")
+        let swell = CAKeyframeAnimation(keyPath: "transform.scale")
+        swell.values = [0, 0.08, 0.08, 0]
+        swell.keyTimes = (0...3).map { NSNumber(value: Double($0) / 3) }
+        swell.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 3)
+        swell.isAdditive = true
+        swell.duration = cycle
+        swell.repeatCount = Float(cycles)
+        holder.add(swell, forKey: "breathe")
+        let said = CAKeyframeAnimation(keyPath: "contents")
+        said.values = ["in", "hold", "out"].map { word in words[word] ?? Self.render(["        " + word], dark: dark) }
+        said.keyTimes = (0...3).map { NSNumber(value: Double($0) / 3) }
+        said.calculationMode = .discrete
+        said.duration = cycle
+        said.repeatCount = Float(cycles)
+        let shown = CABasicAnimation(keyPath: "opacity")
+        shown.fromValue = 1
+        shown.toValue = 1
+        shown.duration = total
+        sayLayer.add(said, forKey: "breathe")
+        sayLayer.add(shown, forKey: "breatheShown")
+        DispatchQueue.main.asyncAfter(deadline: .now() + total) { [weak self] in
+            guard let self, self.breathEnd != nil, !self.breathing else { return }
+            self.breathEnd = nil
+            if cycles > 1 { self.flip([.hi, .hi, .happy1], step: 0.5); self.floatHearts() }
+        }
+    }
+
+    private func stopBreathing() {
+        breathEnd = nil
+        face.removeAnimation(forKey: "breathe")
+        holder.removeAnimation(forKey: "breathe")
+        sayLayer.removeAnimation(forKey: "breathe")
+        sayLayer.removeAnimation(forKey: "breatheShown")
     }
 
     /// The tide: both arms flow over to one side, up, and over to the other, three times, while it sways and notes rise.

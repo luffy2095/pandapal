@@ -4,12 +4,10 @@ import AppKit
 /// the pointer coming near), the right-click menu, and the hooks the app calls. Bodies override the hooks.
 class PandaShell: NSView {
     var onGesture: ((Gesture) -> Void)?
-    var onHoverChanged: ((Bool) -> Void)?   // the pointer arrived or left: shows and hides the talk invite
-    var onMoment: ((Double) -> Void)?       // a moment started that lasts this many seconds: the talk invite steps aside
     var contextMenu: NSMenu?
     var focusMinutes: Double = 0        // screen time without a break, for deep-focus behaviour
     var lastBreakMinutes: Double = 0    // how long the last break was, for the size of the greeting
-    var waterTip = false                // the current break tip is about drinking water
+    var tipAct: TipAct = .stretch       // how it acts out the current break idea
     var bondLevel = 0                   // 0, 1 or 2: higher bond unlocks bigger greetings and tricks
     var temper: Temper?                 // today's mood, which colours some of its moments
     var cursorSide = 0                  // -1 left, 0 near, 1 right: where to glance during a moment
@@ -24,7 +22,7 @@ class PandaShell: NSView {
     func cue(_ cue: Cue) {}
     func react(_ reaction: Reaction) {}
     func treat(_ t: Treat) {}           // a surprise: a trick, a heart, or a gift
-    func thinking() {}                  // waiting for its own words
+    func breathe(cycles: Int) {}        // breathes slowly with you: in, hold, out
     func talking(_ on: Bool) {}         // mouth moves while words appear
 
     private var downPoint: NSPoint?
@@ -98,10 +96,7 @@ class PandaShell: NSView {
         lastMoveDX = 0
         sways = []
         onGesture?(.hover)
-        onHoverChanged?(true)
     }
-
-    override func mouseExited(with event: NSEvent) { onHoverChanged?(false) }
 
     /// Four fast up-and-down turns within a second, without clicking, is a tickle. Only while the pointer is over the panda.
     override func mouseMoved(with event: NSEvent) {

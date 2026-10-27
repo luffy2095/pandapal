@@ -8,12 +8,11 @@ enum Reaction: Equatable {
     case pet, highFive, giggle, dizzy, shy, angry, pout, hug, dangle, drop, dizzyDrop, curious, grumble, wakeUp, cheer, dance
 }
 
-/// Bao's mood for the day. It tunes the rules below, and Apple's model speaks in it.
+/// Bao's mood for the day. It tunes the rules below and its good morning.
 enum Temper: String, CaseIterable, Sendable {
     case playful, sleepy, grumpy, cuddly, curious
 
-    /// Picked each morning from how your last day went; `day` varies it between days. A rule, not the model:
-    /// asked to choose, the model picked a mood that contradicted the facts in 6 of 8 tries.
+    /// Picked each morning from how your last day went; `day` varies it between days.
     static func pick(lastDayBreaks: Int, lastDayLongest: Int, lastDayEnd: Date?, yesterday: Temper?, day: Int,
                      calendar: Calendar = .current) -> Temper {
         guard let end = lastDayEnd else { return .curious }                    // a first day: getting to know you

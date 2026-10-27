@@ -1,35 +1,29 @@
 import AppKit
 @preconcurrency import UserNotifications
 
+/// The name of the signal `PandaPal --say "…"` sends to the running PandaPal.
+let sayNotification = Notification.Name("dev.luffy2095.pandapal.say")
+
 @MainActor
 final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     let menu = NSMenu()
     var brain = Brain()
     var personality = Personality()
-    let companion = Companion()
-    var chat: ChatPanel?
     lazy var bubble: SpeechBubble = {
         let b = SpeechBubble()
         b.anchor = self.panel
-        b.onClick = { [weak self] in self?.lineAnswered(); self?.answer(b.text) }     // click a line to answer it
+        b.onClick = { [weak self] in self?.lineAnswered() }     // click a line to put it away
         return b
     }()
-    lazy var invite: TalkInvite = {
-        let c = TalkInvite()
-        c.anchor = self.panel
-        c.bubble.onClick = { [weak self] in self?.invite.orderOut(nil); self?.openChat() }
-        c.bubble.onHover = { [weak self] inside in self?.hoverChanged(inside) }
-        return c
-    }()
     var breaksSeen = -1                 // to notice a break that just ended
-    var reminderShown: Date?            // a reminder bubble waiting for your click, and how often it has waved since
-    var reminderNudges = 0
-    var replying = false                // Bao is answering in the chat
-    var momentUntil = Date.distantPast  // Bao is playing a moment until then, and "talk?" waits
+    var pinnedShown: Date?              // a message from a script, waiting for your click, and how often it has waved since
+    var pinnedNudges = 0
     var lineWaiting = false             // one of Bao's own lines is showing: will you answer it?
+    var lineTimes: [Date] = []          // its lines in the last hour, at most four
     var bondSeen = -1                   // to notice a new unlock
     var screenLocked = false
+    var inCall = false                  // some app is using the camera or recording the microphone
     var asleep = false
     var clumsyUntil: Date?
     var tip = 0
@@ -41,13 +35,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         .appendingPathComponent("PandaPal/memory.json")
 
     let faces: [Mood: String] = [.eating: "🐼🎋", .wantsBreak: "🐼👋", .happy: "🐼💛", .napping: "🐼💤"]
-    let tips = [
-        "Stand up and stretch with the panda.",
-        "Look at something far away for 20 seconds.",
-        "Drink some water. Panda is having bamboo.",
-        "Step outside for a minute of daylight.",
-        "Roll your shoulders. Pandas roll everything.",
-    ]
+    var tips: [String] { Words.tips.map(\.text) }
 
     func applicationDidFinishLaunching(_ note: Notification) {
         load()
@@ -60,6 +48,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let dc = DistributedNotificationCenter.default()
         dc.addObserver(self, selector: #selector(lock), name: .init("com.apple.screenIsLocked"), object: nil)
         dc.addObserver(self, selector: #selector(unlock), name: .init("com.apple.screenIsUnlocked"), object: nil)
+        dc.addObserver(self, selector: #selector(heard(_:)), name: sayNotification, object: nil)
         // every 15 s: often enough to catch a natural pause; tolerance lets macOS batch the wake-up
         let t = Timer(timeInterval: 15, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.update() } }
         t.tolerance = 5
@@ -85,15 +74,24 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]   // not over full-screen apps
         install(panda)
-        if let saved = UserDefaults.standard.string(forKey: "pandaOrigin") {
-            panel.setFrameOrigin(NSPointFromString(saved))
-        } else if let screen = NSScreen.main?.visibleFrame {
-            panel.setFrameOrigin(NSPoint(x: screen.maxX - panda.frame.width - 20, y: screen.minY + 8))
-        }
+        placePanda()
+        NotificationCenter.default.addObserver(self, selector: #selector(placePanda),
+                                               name: NSApplication.didChangeScreenParametersNotification, object: nil)
         if !UserDefaults.standard.bool(forKey: "pandaHidden") { panel.orderFrontRegardless() }
         NotificationCenter.default.addObserver(self, selector: #selector(refreshPause),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: panel)
         refreshPause()
+    }
+
+    /// Bao's spot from last time, unless no screen shows it any more (a monitor was unplugged): then the bottom right.
+    @objc func placePanda() {
+        let size = panel.frame.size
+        let saved = UserDefaults.standard.string(forKey: "pandaOrigin").map { NSRect(origin: NSPointFromString($0), size: size) }
+        if let saved, NSScreen.screens.contains(where: { $0.frame.contains(NSPoint(x: saved.midX, y: saved.midY)) }) {
+            panel.setFrameOrigin(saved.origin)
+        } else if let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
+            panel.setFrameOrigin(NSPoint(x: screen.maxX - size.width - 20, y: screen.minY + 8))
+        }
     }
 
     func install(_ body: PandaShell) {
@@ -101,11 +99,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.setContentSize(body.frame.size)
         panel.contentView = body
         body.onGesture = { [weak self] g in self?.gesture(g) }
-        body.onHoverChanged = { [weak self] inside in self?.hoverChanged(inside) }
         body.contextMenu = menu
-        body.onMoment = { [weak self] seconds in self?.momentStarted(seconds) }
     }
-
 
     /// Animations run only while someone can see the panda.
     @objc func refreshPause() {
@@ -115,7 +110,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Every 25 seconds: a longer moment, but only if someone can see the panda.
     func live() {
-        guard panel.isVisible, panel.occlusionState.contains(.visible), !(screenLocked || asleep) else { return }
+        guard panel.isVisible, panel.occlusionState.contains(.visible), !(screenLocked || asleep), !inCall else { return }
         let pointer = NSEvent.mouseLocation, middle = panel.frame.midX     // read only now, never tracked
         panda.cursorSide = abs(pointer.x - middle) < 40 ? 0 : (pointer.x < middle ? -1 : 1)
         panda.burst()
@@ -134,16 +129,19 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func update() {
         let now = Date()
         let idle = idleSeconds()
+        inCall = Presence.inCall()
+        let watching = Presence.displayKeptAwake()
+        // a call or a video is screen time even without typing; but after 45 minutes untouched you have probably
+        // gone, as some tools (caffeinate, Amphetamine) keep the display awake all day
+        let busy = (inCall || watching) && idle < 45 * 60
         let before = brain.mood(now)
-        if brain.tick(now: now, idle: idle, locked: screenLocked || asleep) { save() }
-        let (cue, notify) = brain.decide(now: now, idle: idle)
+        if brain.tick(now: now, idle: idle, locked: screenLocked || asleep, busy: busy) { save() }
+        let (cue, notify) = brain.decide(now: now, idle: idle, watching: watching, inCall: inCall)
         let treat = brain.takeTreat(idle: idle, r: .random(in: 0..<1), pick: .random(in: 0..<1))   // after a break or eye rest
         if let treat { save() }
         let mood = brain.mood(now)
         if mood == .wantsBreak && before != .wantsBreak {
-            // water when it is due, otherwise the next of the other tips
-            let water = tips.firstIndex { $0.contains("water") }!
-            tip = brain.waterDue(now) ? water : (tip + 1 == water ? tip + 2 : tip + 1) % tips.count
+            tip = Words.nextTip(after: tip, waterDue: brain.waterDue(now), hour: Calendar.current.component(.hour, from: now))
         }
         if mood == .eating, clumsyUntil.map({ now >= $0 }) ?? true, Int.random(in: 0..<40) == 0 {
             clumsyUntil = now.addingTimeInterval(60)
@@ -151,7 +149,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         panda.focusMinutes = brain.stretchMinutes(now)
         panda.lastBreakMinutes = brain.lastBreakMinutes
-        panda.waterTip = tips[tip].contains("water")
+        panda.tipAct = Words.tips[tip].act
         panda.bondLevel = brain.bondLevel
         let temper = Temper(rawValue: brain.memory.temper)
         personality.temper = temper
@@ -166,31 +164,27 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         // its own words at its moments
         if breaksSeen >= 0, brain.memory.breaksToday > breaksSeen {
-            var moment = "The user just came back from a \(Int(brain.lastBreakMinutes))-minute break."
-            if case .gift(let g)? = treat { moment += " You found a little \(g.rawValue) for them, and you give it to them now." }
-            say(moment)
+            if case .gift(let g)? = treat { say(Words.gift(g)) } else { say(Words.back.randomElement()!) }
         } else if mood == .wantsBreak, before != .wantsBreak {
-            say("You want the user to take a break now. Suggest this: \(tips[tip])", optional: false)
+            say(tips[tip], optional: false)
         }
         if brain.memory.temperDay != brain.memory.day {
-            pickTemper(greet: cue == .morning)                 // once a day, and its first words come in that mood
+            pickTemper(greet: cue == .morning)                 // once a day, and its good morning comes in that mood
         } else if cue == .morning {
-            say("It is the user's first visit today. Say good morning.")
+            say(Words.morning.randomElement()!)
         }
-        let due = brain.takeDue(now)
-        if !due.isEmpty { deliver(due, now); save() }
-        if let shown = reminderShown {                       // an unclicked reminder waves again each minute, 3 times at most
-            if !bubble.isVisible || reminderNudges >= 3 {
-                reminderShown = nil
-            } else if now.timeIntervalSince(shown) >= 60 * Double(reminderNudges + 1), canBeSeen {
+        if let shown = pinnedShown {                         // an unclicked message waves again each minute, 3 times at most
+            if !bubble.isVisible || pinnedNudges >= 3 {
+                pinnedShown = nil
+            } else if now.timeIntervalSince(shown) >= 60 * Double(pinnedNudges + 1), canBeSeen {
                 bubble.nudge()
                 panda.cue(.remind)
-                reminderNudges += 1
+                pinnedNudges += 1
             }
         }
         switch cue {
-        case .sleepy?: say("It is late at night. Encourage the user to wrap up and sleep.", optional: false)
-        case .reunion?: say("The user is back after days away. You missed them.")
+        case .sleepy?: say(Words.late.randomElement()!, optional: false)
+        case .reunion?: say(Words.reunion.randomElement()!)
         default: break
         }
         breaksSeen = brain.memory.breaksToday
@@ -223,11 +217,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Pet the panda", action: #selector(pet), keyEquivalent: "").target = self
-        if Companion.available {
-            menu.addItem(withTitle: "Talk to Bao…", action: #selector(openChat), keyEquivalent: "").target = self
-        } else {
-            menu.addItem(NSMenuItem(title: "Talk to Bao (needs Apple Intelligence)", action: nil, keyEquivalent: ""))
-        }
+        menu.addItem(withTitle: "Breathe with Bao (1 minute)", action: #selector(breathe), keyEquivalent: "").target = self
         if let until = brain.snoozeUntil, now < until {
             let time = DateFormatter.localizedString(from: until, dateStyle: .none, timeStyle: .short)
             menu.addItem(withTitle: "Break reminders snoozed until \(time). Resume", action: #selector(resume), keyEquivalent: "").target = self
@@ -236,13 +226,23 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let hidden = UserDefaults.standard.bool(forKey: "pandaHidden")
         menu.addItem(withTitle: hidden ? "Show panda on screen" : "Hide panda from screen", action: #selector(toggleHidden), keyEquivalent: "").target = self
+        let sizes = NSMenu()
+        for (name, scale) in [("Small", 0.75), ("Normal", 1.0), ("Large", 1.3)] {
+            let choice = sizes.addItem(withTitle: name, action: #selector(resize(_:)), keyEquivalent: "")
+            choice.target = self
+            choice.representedObject = scale
+            choice.state = TextPandaView.scale == CGFloat(scale) ? .on : .off
+        }
+        let size = menu.addItem(withTitle: "Size", action: nil, keyEquivalent: "")
+        size.submenu = sizes
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit PandaPal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     @objc func pet() { gesture(.tap) }
+    @objc func breathe() { panda.breathe(cycles: 5) }
 
-    /// Your mouse, through the panda's personality. Affection makes it happy for a minute; none of it earns bond.
+    /// Your mouse, through the panda's personality. Affection makes it happy for a minute.
     func gesture(_ g: Gesture) {
         let now = Date()
         if g == .hover, let panel {
@@ -277,9 +277,9 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch u {
         case .trick(let t):
             if canBeSeen { panda.treat(.trick(t)) }
-            say("You just learned a new trick: \(t.rawValue). Tell the user proudly.", optional: false)
+            say(Words.trick(t), optional: false)
         case .gift(let g):
-            say("From now on you can find a new kind of gift for the user: a \(g.rawValue). Tell them, excited.", optional: false)
+            say(Words.newGift(g), optional: false)
         }
     }
 
@@ -308,10 +308,19 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if hide { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
         refreshPause()
     }
+    /// A new panda body at the chosen size, in the same spot.
+    @objc func resize(_ choice: NSMenuItem) {
+        guard let scale = choice.representedObject as? Double, CGFloat(scale) != TextPandaView.scale else { return }
+        UserDefaults.standard.set(scale, forKey: "pandaScale")
+        TextPandaView.scale = CGFloat(scale)
+        install(TextPandaView(frame: .zero))
+        update()
+        refreshPause()
+    }
     @objc func snooze() { brain.snoozeUntil = Date().addingTimeInterval(3600); update() }
     @objc func resume() { brain.snoozeUntil = nil; update() }
 
-    /// The one break notification at the top of the escalation, and the backup for a reminder nobody could see.
+    /// The one break notification at the top of the escalation, and the backup for a message nobody could see.
     /// macOS asks for permission the first time.
     func sendNotification(_ body: String, title: String = "Your panda wants to play", id: String = "break", sound: Bool = false) {
         let center = UNUserNotificationCenter.current()
@@ -333,19 +342,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: companion
-
-    /// What Bao knows: the time and its own world. Never apps, files or screen contents.
-    func context() -> String {
-        let now = Date()
-        let clock = DateFormatter.localizedString(from: now, dateStyle: .none, timeStyle: .short)
-        let doing: [Mood: String] = [.eating: "munching bamboo", .wantsBreak: "waiting for the user to take a break",
-                                     .happy: "happy", .napping: "napping"]
-        return "It is \(clock). The user has been at the screen \(Int(brain.stretchMinutes(now))) minutes without a break. "
-             + "Breaks today: \(brain.memory.breaksToday). Eye rests today: \(brain.memory.eyeRestsToday). "
-             + "Bao is \(doing[brain.mood(now)]!). Bond: \(brain.memory.bond)."
-             + (brain.memory.temper.isEmpty ? "" : " Today Bao feels \(brain.memory.temper).")
-    }
+    // MARK: words
 
     /// The face Bao ends a line with, from its mood and the hour.
     func face() -> String {
@@ -364,108 +361,17 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSPoint(x: panel.frame.minX + panda.headPoint.x, y: panel.frame.minY + panda.headPoint.y)
     }
 
-    /// "talk?" steps aside while Bao plays a moment, and comes back after the last one if the pointer is still there.
-    func momentStarted(_ seconds: Double) {
-        let until = Date().addingTimeInterval(seconds)
-        guard until > momentUntil else { return }
-        momentUntil = until
-        invite.orderOut(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-            guard let self, let panel = self.panel, Date() >= self.momentUntil, panel.frame.contains(NSEvent.mouseLocation) else { return }
-            self.hoverChanged(true)
-        }
-    }
-
-    /// "talk?" appears above Bao while the pointer is on the panda or on the bubble, and goes as soon as it is on neither.
-    func hoverChanged(_ inside: Bool) {
-        guard inside else {
-            // hide once the pointer is off both the panda and the bubble; checked a moment later, because moving
-            // up from the panda into the bubble leaves the one before it enters the other
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                let p = NSEvent.mouseLocation
-                if self.panel?.frame.contains(p) != true, !self.invite.frame.contains(p) { self.invite.orderOut(nil) }
-            }
-            return
-        }
-        guard Companion.available, chat?.isVisible != true, !bubble.isVisible, panel != nil, Date() >= momentUntil else { return }
-        invite.show(head: head())
-        DispatchQueue.main.async { [weak self] in _ = self?.chatPanel() }   // after the bubble is on screen
-    }
-
-    func answer(_ line: String) {
-        openChat()
-        companion.heard(line)
-        chat?.set(line)
-    }
-
-    /// The chat window, made once. The first focus of its text field takes macOS about a second (measured 1.1 to 2.5 s),
-    /// so the "talk?" bubble makes it early, while the window is still hidden.
-    func chatPanel() -> ChatPanel {
-        if let chat { return chat }
-        let c = ChatPanel()
-        c.anchor = panel
-        c.onSend = { [weak self] text in self?.send(text) }
-        NotificationCenter.default.addObserver(self, selector: #selector(chatClosed), name: NSWindow.willCloseNotification, object: c)
-        NotificationCenter.default.addObserver(self, selector: #selector(chatLostFocus), name: NSWindow.didResignKeyNotification, object: c)
-        c.makeFirstResponder(c.input)
-        chat = c
-        return c
-    }
-
-    @objc func openChat() {
-        let c = chatPanel()
-        companion.startChat(mood: Temper(rawValue: brain.memory.temper)) { [weak self] act in await self?.perform(act) ?? "" }
-        invite.orderOut(nil)
-        c.open(head: head(), reply: "Hi! Ask me anything, or ask me to remind you of something. (●ᴥ●)")
-        NSApp.activate(ignoringOtherApps: true)
-        c.makeKeyAndOrderFront(nil)
-        c.makeFirstResponder(c.input)
-        c.pop()
-    }
-
-    /// A click outside the chat closes it, unless Bao is still answering: then the reply waits there and waves.
-    @objc func chatLostFocus() { if !replying { chat?.close() } }
-
-    @objc func chatClosed() {
-        companion.endChat()                   // the conversation is gone; nothing was saved
-        panda.talking(false)
-    }
-
-    func send(_ text: String) {
-        guard let chat else { return }
-        chat.asked = text
-        chat.set("…")
-        panda.thinking()
-        let sent = Date()
-        replying = true
-        Task { @MainActor in
-            defer { replying = false }
-            var started = false
-            _ = await companion.reply(to: text, face: face()) { [weak self] partial in
-                if !started { started = true; self?.panda.talking(true) }
-                chat.set(partial)
-            }
-            panda.talking(false)
-            if Date().timeIntervalSince(sent) >= 4 || !chat.isKeyWindow {     // you may have looked away: catch your eye
-                chat.nudge()
-                panda.cue(.remind)
-            }
-            play(Date())                                                      // a chat is play too
-        }
-    }
-
-    /// A short line in a speech bubble for one of the panda's moments, unless the chat is open or nobody can see it.
-    /// An `optional` line comes less often when you keep ignoring Bao's lines; break asks and bedtime are never optional.
-    func say(_ moment: String, optional: Bool = true) {
-        guard Companion.available, canBeSeen, chat?.isVisible != true else { return }
+    /// One of Bao's lines in its bubble: at most four an hour, only when someone can see it, never during a call,
+    /// and never over a message a script sent. An `optional` line comes less often when you keep ignoring Bao's lines; break asks
+    /// and bedtime are never optional.
+    func say(_ text: String, optional: Bool = true) {
+        let now = Date()
+        lineTimes = lineTimes.filter { now.timeIntervalSince($0) < 3600 }
+        guard canBeSeen, !inCall, lineTimes.count < 4, pinnedShown == nil else { return }
         if optional, !brain.wants(.line, r: .random(in: 0..<1)) { return }
-        let ctx = context()
-        Task { @MainActor in
-            guard let line = await companion.line(for: moment, context: ctx, mood: personality.temper, face: face()) else { return }
-            speak(line)
-            lineWaiting = optional
-        }
+        lineTimes.append(now)
+        speak("\(text) \(face())")
+        lineWaiting = optional
     }
 
     /// Someone could see the panda right now.
@@ -485,27 +391,22 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Bao says due reminders herself: in the open chat, or waving in her bubble until you click it. When nobody
-    /// can see her (hidden, under a full-screen app, screen locked), a notification carries them, so none is missed.
-    func deliver(_ due: [Reminder], _ now: Date) {
-        let text = due.map { r in
-            now.timeIntervalSince(r.at) > 120 ? "(\(DateFormatter.localizedString(from: r.at, dateStyle: .none, timeStyle: .short))) \(r.text)" : r.text
-        }.joined(separator: "\n")
-        if let chat, chat.isVisible {
-            chat.asked = nil
-            chat.set(text + " " + face())
-        } else if canBeSeen {
+    /// A script sent words with `PandaPal --say "…"`. Bao waves and says them, and the bubble stays until you click
+    /// it, waving again each minute, 3 times at most. When nobody can see Bao, a notification carries them instead.
+    @objc func heard(_ note: Notification) {
+        guard let raw = note.object as? String, let text = Words.said(raw) else { return }
+        if canBeSeen {
             panda.cue(.remind)
-            speak(text + " " + face(), seconds: 3600)
+            speak("\(text) \(face())", seconds: 3600)
             bubble.nudge()
-            reminderShown = now
-            reminderNudges = 0
+            pinnedShown = Date()
+            pinnedNudges = 0
         } else {
-            sendNotification(text, title: "Bao's reminder", id: UUID().uuidString, sound: true)
+            sendNotification(text, title: "Bao says", id: UUID().uuidString, sound: true)
         }
     }
 
-    /// Once a day: Bao's mood, from how your last day went. Apple's model greets you in it.
+    /// Once a day: Bao's mood, from how your last day went, and a good morning in that mood.
     func pickTemper(greet: Bool) {
         let m = brain.memory
         let t = Temper.pick(lastDayBreaks: m.lastDayBreaks, lastDayLongest: m.lastDayLongest, lastDayEnd: m.lastDayEnd,
@@ -515,48 +416,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         save()
         personality.temper = t
         panda.temper = t
-        guard greet else { return }
-        var lastTime = ""
-        if let end = m.lastDayEnd {
-            lastTime = " Last time the user took \(m.lastDayBreaks) breaks, their longest stretch was \(m.lastDayLongest) minutes, "
-                     + "and they left at \(DateFormatter.localizedString(from: end, dateStyle: .none, timeStyle: .short))."
-        }
-        say("It is the user's first visit today, and today you feel \(t.rawValue). Say good morning in that mood.\(lastTime)")
-    }
-
-    /// Does what Bao was asked in the chat, and returns what to tell the model.
-    func perform(_ act: Act) async -> String {
-        switch act {
-        case .day:
-            let now = Date()
-            return "Screen time since the last break: \(Int(brain.stretchMinutes(now))) minutes. Breaks today: \(brain.memory.breaksToday). "
-                 + "Eye rests today: \(brain.memory.eyeRestsToday). Longest time without a break today: \(brain.memory.longestStretchMinutes) minutes."
-        case .snooze(let minutes):
-            brain.snoozeUntil = Date().addingTimeInterval(Double(minutes) * 60)
-            update()
-        case .focus(let minutes):
-            brain.snoozeUntil = Date().addingTimeInterval(Double(minutes) * 60)
-            brain.memory.reminders.append(Reminder(text: "Focus time is up! Stand up and stretch for 5 minutes.", at: brain.snoozeUntil!))
-            save()
-            check(at: brain.snoozeUntil!)
-            update()
-        case .remind(let what, let at):
-            brain.memory.reminders.append(Reminder(text: "Psst! Time to \(what).", at: at))
-            save()
-            check(at: at)
-        case .weather:
-            guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.weather")
-            else { return "✗ The Weather app is not on this Mac." }
-            guard (try? await NSWorkspace.shared.openApplication(at: app, configuration: .init())) != nil
-            else { return "✗ The Weather app did not open." }
-        }
-        return Companion.receipt(act)
-    }
-
-    /// Looks for due reminders at `date`, so a short one arrives on time, not at the next 15-second tick.
-    func check(at date: Date) {
-        let t = Timer(fire: date, interval: 0, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.update() } }
-        RunLoop.main.add(t, forMode: .common)
+        if greet, let hello = Words.mood[t] { say(hello) }
     }
 
     func save() {
@@ -565,7 +425,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 }
 
-/// Shows notifications as banners even while PandaPal is the active app, as when the chat is open.
+/// Shows notifications as banners even while PandaPal is the active app.
 extension PandaApp: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
@@ -573,33 +433,21 @@ extension PandaApp: UNUserNotificationCenterDelegate {
     }
 }
 
-if let i = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.arguments.count > i + 1 {
-    // Talks to Bao from the terminal: --ask "message" ["next message" ...] is one chat; actions are only printed.
-    // --ask --moment "moment" ["context" ["mood"]] asks for one of its bubble lines.
-    let args = Array(CommandLine.arguments[(i + 1)...])
-    Task { @MainActor in
-        let c = Companion()
-        if args.first == "--moment", args.count > 1 {
-            let context = args.count > 2 ? args[2] : "It is 15:20. The user has been at the screen 58 minutes without a break."
-            let t = Date()
-            let answer = await c.line(for: args[1], context: context, mood: args.count > 3 ? Temper(rawValue: args[3]) : nil)
-            print(String(format: "[%.1fs] ", Date().timeIntervalSince(t)) + (answer ?? "(no answer)"))
-            exit(0)
-        }
-        c.startChat { act in
-            print("[act] \(act)")
-            if case .day = act { return "Screen time since the last break: 30 minutes. Breaks today: 4. Eye rests today: 2. Longest time without a break today: 55 minutes." }
-            return Companion.receipt(act)
-        }
-        for text in args {
-            let t = Date()
-            var first: Double?
-            let answer = await c.reply(to: text) { _ in if first == nil { first = Date().timeIntervalSince(t) } }
-            print("> \(text)\n" + String(format: "[first words %.1fs, done %.1fs] ", first ?? -1, Date().timeIntervalSince(t)) + answer + "\n")
-        }
-        exit(0)
+if let i = CommandLine.arguments.firstIndex(of: "--say") {
+    // `PandaPal --say "Build finished!"` hands the words to the running PandaPal, which says them, and exits.
+    let text = CommandLine.arguments.dropFirst(i + 1).joined(separator: " ")
+    guard Words.said(text) != nil else {
+        FileHandle.standardError.write(Data("Usage: PandaPal --say \"what Bao should say\"\n".utf8))
+        exit(2)
     }
-    RunLoop.main.run()
+    let me = ProcessInfo.processInfo.processIdentifier
+    guard NSRunningApplication.runningApplications(withBundleIdentifier: "dev.luffy2095.pandapal").contains(where: { $0.processIdentifier != me }) else {
+        FileHandle.standardError.write(Data("PandaPal is not running.\n".utf8))
+        exit(1)
+    }
+    DistributedNotificationCenter.default().postNotificationName(sayNotification, object: text, userInfo: nil, deliverImmediately: true)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))        // let the signal leave before this process ends
+    exit(0)
 }
 
 if let i = CommandLine.arguments.firstIndex(of: "--snapshot") {

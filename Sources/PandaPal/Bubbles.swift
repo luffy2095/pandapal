@@ -1,7 +1,7 @@
 import AppKit
 
 /// Bao's speech bubble: a rounded body with a tail pointing down at its head, outlined like the panda's
-/// own rim. The talk invite, Bao's lines and the chat all use it, so they read as the panda speaking.
+/// own rim, so it reads as the panda speaking.
 final class BubbleView: NSView {
     static let tail: CGFloat = 9                  // height of the tail under the body
     static let font: NSFont = {
@@ -10,7 +10,6 @@ final class BubbleView: NSView {
     }()
     var tailX: CGFloat = 30 { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
-    var onHover: ((Bool) -> Void)?
     private var pressed = false { didSet { needsDisplay = true } }     // darker while the button is down, like a button
 
     override func draw(_ dirtyRect: NSRect) {
@@ -37,13 +36,6 @@ final class BubbleView: NSView {
         pressed = false
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
     }
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
-    }
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
 /// A borderless floating window holding one bubble.
@@ -102,26 +94,7 @@ class BubblePanel: NSPanel {
     override func close() { parent?.removeChildWindow(self); super.close() }
 }
 
-/// "talk?" above Bao's head while your pointer is near it. It stays while the pointer is on it.
-final class TalkInvite: BubblePanel {
-    init() {
-        super.init(width: 62)
-        let label = NSTextField(labelWithString: "talk?")
-        label.font = BubbleView.font
-        label.alignment = .center
-        label.frame = NSRect(x: 0, y: BubbleView.tail + 5, width: 62, height: 18)
-        bubble.addSubview(label)
-    }
-
-    func show(head: NSPoint) {
-        let wasVisible = isVisible
-        place(height: BubbleView.tail + 28, head: head)
-        orderFrontRegardless()
-        if !wasVisible { pop() }
-    }
-}
-
-/// Bao's own short lines, above its head. Click one to answer it; it fades by itself otherwise.
+/// Bao's own short lines, above its head. Click one to put it away; it fades by itself otherwise.
 final class SpeechBubble: BubblePanel {
     private let label = NSTextField(wrappingLabelWithString: "")
     private var hideWork: DispatchWorkItem?
@@ -146,83 +119,5 @@ final class SpeechBubble: BubblePanel {
         let work = DispatchWorkItem { [weak self] in self?.orderOut(nil) }
         hideWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
-    }
-}
-
-/// The chat, in Bao's bubble: your last message, Bao's reply, and a field to type in. It grows with the
-/// reply and scrolls past `maxText`. Enter sends; Escape or ✕ closes it and ends the conversation.
-final class ChatPanel: BubblePanel {
-    let input = NSTextField()
-    var asked: String?                       // your last message, shown small above the reply
-    var onSend: ((String) -> Void)?
-    private let scroll = NSScrollView()
-    private let transcript = NSTextView()
-    private let close = NSButton(title: "✕", target: nil, action: nil)
-    private var head = NSPoint.zero
-    private let maxText: CGFloat = 220
-
-    init() {
-        super.init(width: 320)
-        input.placeholderString = "Ask Bao anything…"
-        input.bezelStyle = .roundedBezel
-        input.font = BubbleView.font
-        input.target = self
-        input.action = #selector(send)
-        transcript.isEditable = false
-        transcript.drawsBackground = false
-        transcript.textContainerInset = .zero
-        transcript.textContainer?.widthTracksTextView = true
-        scroll.documentView = transcript
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        close.target = self
-        close.action = #selector(dismiss)
-        close.isBordered = false
-        close.contentTintColor = .secondaryLabelColor
-        [scroll, input, close].forEach(bubble.addSubview)
-    }
-
-    override var canBecomeKey: Bool { true }
-    override func cancelOperation(_ sender: Any?) { dismiss() }          // Escape
-
-    /// Opens above `head` with Bao's `reply`.
-    func open(head: NSPoint, reply: String) {
-        self.head = head
-        asked = nil
-        set(reply)
-    }
-
-    /// Shows Bao's reply under your last message, and resizes to fit.
-    func set(_ reply: String) {
-        let text = NSMutableAttributedString()
-        if let asked {
-            text.append(NSAttributedString(string: asked + "\n", attributes: [
-                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
-        }
-        text.append(NSAttributedString(string: reply, attributes: [.font: BubbleView.font, .foregroundColor: NSColor.labelColor]))
-        transcript.textStorage?.setAttributedString(text)
-        let width: CGFloat = 270
-        transcript.frame = NSRect(x: 0, y: 0, width: width, height: 10)
-        transcript.layoutManager?.ensureLayout(for: transcript.textContainer!)
-        let used = ceil(transcript.layoutManager?.usedRect(for: transcript.textContainer!).height ?? 18)
-        let shown = min(used, maxText)
-        transcript.frame.size.height = used
-        let bottom = BubbleView.tail + 10
-        input.frame = NSRect(x: 12, y: bottom, width: 296, height: 24)
-        scroll.frame = NSRect(x: 14, y: bottom + 24 + 10, width: width + 6, height: shown)
-        let height = bottom + 24 + 10 + shown + 14
-        close.frame = NSRect(x: 292, y: height - 26, width: 18, height: 18)
-        place(height: height, head: head)
-        transcript.scrollToEndOfDocument(nil)
-    }
-
-    @objc func dismiss() { close() }
-
-    @objc private func send() {
-        let text = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        input.stringValue = ""
-        onSend?(text)
     }
 }
