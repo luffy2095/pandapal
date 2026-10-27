@@ -17,8 +17,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return b
     }()
     var breaksSeen = -1                 // to notice a break that just ended
-    var pinnedShown: Date?              // a message from a script, waiting for your click, and how often it has waved since
-    var pinnedNudges = 0
+    var pinned: String?                 // a message from a script that is showing in the bubble
+    var pinTimer: Timer?                // while it waits for you to come back
     var lineWaiting = false             // one of Bao's own lines is showing: will you answer it?
     var lineTimes: [Date] = []          // its lines in the last hour, at most four
     var bondSeen = -1                   // to notice a new unlock
@@ -173,15 +173,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if cue == .morning {
             say(Words.morning.randomElement()!)
         }
-        if let shown = pinnedShown {                         // an unclicked message waves again each minute, 3 times at most
-            if !bubble.isVisible || pinnedNudges >= 3 {
-                pinnedShown = nil
-            } else if now.timeIntervalSince(shown) >= 60 * Double(pinnedNudges + 1), canBeSeen {
-                bubble.nudge()
-                panda.cue(.remind)
-                pinnedNudges += 1
-            }
-        }
+        if pinned != nil, !bubble.isVisible { pinned = nil }   // the script's message went
         switch cue {
         case .sleepy?: say(Words.late.randomElement()!, optional: false)
         case .reunion?: say(Words.reunion.randomElement()!)
@@ -367,7 +359,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func say(_ text: String, optional: Bool = true) {
         let now = Date()
         lineTimes = lineTimes.filter { now.timeIntervalSince($0) < 3600 }
-        guard canBeSeen, !inCall, lineTimes.count < 4, pinnedShown == nil else { return }
+        guard canBeSeen, !inCall, lineTimes.count < 4, pinned == nil else { return }
         if optional, !brain.wants(.line, r: .random(in: 0..<1)) { return }
         lineTimes.append(now)
         speak("\(text) \(face())")
@@ -391,18 +383,29 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// A script sent words with `PandaPal --say "…"`. Bao waves and says them, and the bubble stays until you click
-    /// it, waving again each minute, 3 times at most. When nobody can see Bao, a notification carries them instead.
+    /// A script sent words with `PandaPal --say "…"`. Bao waves and says them. The bubble goes 15 seconds after you
+    /// are at your Mac: at once if you are, or once you move the mouse or type if you were away. A click puts it away
+    /// sooner. When nobody can see Bao, a notification carries the words instead.
     @objc func heard(_ note: Notification) {
         guard let raw = note.object as? String, let text = Words.said(raw) else { return }
-        if canBeSeen {
-            panda.cue(.remind)
-            speak("\(text) \(face())", seconds: 3600)
-            bubble.nudge()
-            pinnedShown = Date()
-            pinnedNudges = 0
-        } else {
+        guard canBeSeen else {
             sendNotification(text, title: "Bao says", id: UUID().uuidString, sound: true)
+            return
+        }
+        let line = "\(text) \(face())"
+        panda.cue(.remind)
+        speak(line, seconds: 3600)
+        bubble.nudge()
+        pinned = line
+        pinTimer?.invalidate()
+        // once a second, only while the message waits: the first sign of you starts its last 15 seconds
+        pinTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self, self.pinned == line, self.bubble.isVisible else { timer.invalidate(); return }
+                guard self.idleSeconds() < 2 else { return }
+                timer.invalidate()
+                self.bubble.hide(after: 15)
+            }
         }
     }
 

@@ -115,6 +115,11 @@ final class SpeechBubble: BubblePanel {
         place(height: h + BubbleView.tail + 19, head: head)
         orderFrontRegardless()
         pop()
+        hide(after: seconds)
+    }
+
+    /// Puts the bubble away after `seconds`, unless something new shows in it first.
+    func hide(after seconds: Double) {
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.orderOut(nil) }
         hideWork = work
