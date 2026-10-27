@@ -18,7 +18,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }()
     var breaksSeen = -1                 // to notice a break that just ended
     var pinned: String?                 // a message from a script that is showing in the bubble
-    var pinTimer: Timer?                // while it waits for you to come back
+    var pinTimer: Timer?
+    var sayPort: CFMessagePort?                // while it waits for you to come back
     var lineWaiting = false             // one of Bao's own lines is showing: will you answer it?
     var lineTimes: [Date] = []          // its lines in the last hour, at most four
     var bondSeen = -1                   // to notice a new unlock
@@ -48,7 +49,14 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let dc = DistributedNotificationCenter.default()
         dc.addObserver(self, selector: #selector(lock), name: .init("com.apple.screenIsLocked"), object: nil)
         dc.addObserver(self, selector: #selector(unlock), name: .init("com.apple.screenIsUnlocked"), object: nil)
-        dc.addObserver(self, selector: #selector(heard(_:)), name: sayNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(heard(_:)), name: sayNotification, object: nil)
+        // a private port, not a broadcast: other apps cannot read the words, and sandboxed apps cannot send any
+        sayPort = CFMessagePortCreateLocal(nil, sayNotification.rawValue as CFString, { _, _, data, _ in
+            // 2 KB is ample for 200 characters; a bigger message is cut before any work is done on it
+            if let data { NotificationCenter.default.post(name: sayNotification, object: String(decoding: (data as Data).prefix(2048), as: UTF8.self)) }
+            return nil
+        }, nil, nil)
+        if let sayPort { CFRunLoopAddSource(CFRunLoopGetMain(), CFMessagePortCreateRunLoopSource(nil, sayPort, 0), .commonModes) }
         // every 15 s: often enough to catch a natural pause; tolerance lets macOS batch the wake-up
         let t = Timer(timeInterval: 15, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.update() } }
         t.tolerance = 5
@@ -130,6 +138,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = Date()
         let idle = idleSeconds()
         inCall = Presence.inCall()
+        if inCall, pinned != nil { bubble.hide(after: 0) }   // a script's message leaves before a screen is shared
         let watching = Presence.displayKeptAwake()
         // a call or a video is screen time even without typing; but after 45 minutes untouched you have probably
         // gone, as some tools (caffeinate, Amphetamine) keep the display awake all day
@@ -388,7 +397,8 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// sooner. When nobody can see Bao, a notification carries the words instead.
     @objc func heard(_ note: Notification) {
         guard let raw = note.object as? String, let text = Words.said(raw) else { return }
-        guard canBeSeen else {
+        // in a call your screen may be shared; macOS keeps notifications off a shared screen by default
+        guard canBeSeen, !Presence.inCall() else {
             sendNotification(text, title: "Bao says", id: UUID().uuidString, sound: true)
             return
         }
@@ -443,13 +453,11 @@ if let i = CommandLine.arguments.firstIndex(of: "--say") {
         FileHandle.standardError.write(Data("Usage: PandaPal --say \"what Bao should say\"\n".utf8))
         exit(2)
     }
-    let me = ProcessInfo.processInfo.processIdentifier
-    guard NSRunningApplication.runningApplications(withBundleIdentifier: "dev.luffy2095.pandapal").contains(where: { $0.processIdentifier != me }) else {
+    guard let port = CFMessagePortCreateRemote(nil, sayNotification.rawValue as CFString),
+          CFMessagePortSendRequest(port, 0, Data(text.utf8) as CFData, 1, 0, nil, nil) == kCFMessagePortSuccess else {
         FileHandle.standardError.write(Data("PandaPal is not running.\n".utf8))
         exit(1)
     }
-    DistributedNotificationCenter.default().postNotificationName(sayNotification, object: text, userInfo: nil, deliverImmediately: true)
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))        // let the signal leave before this process ends
     exit(0)
 }
 

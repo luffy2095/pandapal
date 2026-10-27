@@ -20,11 +20,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>dev.luffy2095.pandapal</string>
   <key>CFBundleName</key><string>PandaPal</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0.1</string>
+  <key>CFBundleShortVersionString</key><string>1.0.2</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
 </dict></plist>
 PLIST
-codesign --force --deep -s - "$APP"
+codesign --force --deep --options runtime -s - "$APP"   # hardened runtime: no code injection
 echo "built $APP"

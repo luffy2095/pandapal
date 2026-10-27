@@ -121,7 +121,7 @@ Any script can hand Bao the words to say:
 /Applications/PandaPal.app/Contents/MacOS/PandaPal --say "Tests passed!"
 ```
 
-Bao waves and says it in its bubble. The bubble goes 15 seconds after you are at your Mac: at once if you are using it, or, if you were away, 15 seconds after you move the mouse or type. A click puts it away sooner. When nobody can see Bao (it is hidden, a full-screen app covers it, or the screen is locked), a macOS notification titled "Bao says" carries the words instead. Bao says the words exactly as given, on one line, up to 200 characters, and saves nothing. The command exits with 0 when the words were sent, 1 when PandaPal is not running, and 2 when there is nothing to say.
+Bao waves and says it in its bubble. The bubble goes 15 seconds after you are at your Mac: at once if you are using it, or, if you were away, 15 seconds after you move the mouse or type. A click puts it away sooner. When nobody can see Bao (it is hidden, a full-screen app covers it, or the screen is locked) or you are in a call, a macOS notification titled "Bao says" carries the words instead. macOS keeps notifications off a shared screen. Bao says the words exactly as given, on one line, up to 200 characters, and saves nothing. The words go straight to Bao: other apps cannot listen in, and sandboxed apps cannot send any. The command exits with 0 when the words were sent, 1 when PandaPal is not running, and 2 when there is nothing to say.
 
 For example, with an alias in your shell profile:
 

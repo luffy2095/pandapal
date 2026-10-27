@@ -1,9 +1,10 @@
 import AppKit
 
-/// Bao's speech bubble: a rounded body with a tail pointing down at its head, outlined like the panda's
-/// own rim, so it reads as the panda speaking.
+/// Bao's speech bubble: a thought cloud with two small puffs drifting down to its head, outlined like the
+/// panda's own rim.
 final class BubbleView: NSView {
-    static let tail: CGFloat = 9                  // height of the tail under the body
+    static let tail: CGFloat = 19.5               // room under the cloud for the two puffs
+    static let puff: CGFloat = 7                  // room around the cloud's body for its bumps and outline
     static let font: NSFont = {
         let f = NSFont.systemFont(ofSize: 13)
         return NSFont(descriptor: f.fontDescriptor.withDesign(.rounded) ?? f.fontDescriptor, size: 13) ?? f
@@ -13,19 +14,35 @@ final class BubbleView: NSView {
     private var pressed = false { didSet { needsDisplay = true } }     // darker while the button is down, like a button
 
     override func draw(_ dirtyRect: NSRect) {
-        let body = NSRect(x: 1.5, y: Self.tail + 1.5, width: bounds.width - 3, height: bounds.height - Self.tail - 3)
-        let round = NSBezierPath(roundedRect: body, xRadius: 12, yRadius: 12)
+        let body = NSRect(x: Self.puff, y: Self.tail, width: bounds.width - 2 * Self.puff, height: bounds.height - Self.tail - Self.puff)
         let x = min(max(tailX, body.minX + 16), body.maxX - 16)
-        let tip = NSBezierPath()
-        tip.move(to: NSPoint(x: x - 7, y: body.minY + 2))
-        tip.line(to: NSPoint(x: x - 2, y: 1.5))
-        tip.line(to: NSPoint(x: x + 5, y: body.minY + 2))
-        tip.close()
+        let shapes = [Self.cloud(body), Self.circle(x - 1, 12.5, 4.5), Self.circle(x - 5, 4.5, 2.6)].map { NSBezierPath(cgPath: $0) }
         NSColor.labelColor.withAlphaComponent(0.8).setStroke()
         (pressed ? NSColor.textBackgroundColor.blended(withFraction: 0.18, of: .labelColor)! : NSColor.textBackgroundColor).setFill()
-        for p in [tip, round] { p.lineWidth = 3; p.stroke() }    // the fills cover the inner half: a 1.5 pt outline
-        round.fill()
-        tip.fill()                                                // also hides the outline where tail meets body
+        for p in shapes { p.lineWidth = 3; p.stroke() }    // the fills cover the inner half: a 1.5 pt outline
+        for p in shapes { p.fill() }
+    }
+
+    /// A rounded body with round bumps along its edge, big and small in turn along the top and bottom.
+    private static func cloud(_ b: NSRect) -> CGPath {
+        let r: CGFloat = 12, inset = r * 0.55, step = r * 1.3
+        func spread(_ from: CGFloat, _ to: CGFloat) -> [CGFloat] {
+            let n = max(2, Int(((to - from) / step).rounded()) + 1)
+            return (0..<n).map { from + (to - from) * CGFloat($0) / CGFloat(n - 1) }
+        }
+        var path = CGPath(roundedRect: b, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        for (i, x) in spread(b.minX + inset, b.maxX - inset).enumerated() {
+            let k: CGFloat = i % 2 == 0 ? 1 : 0.8
+            path = path.union(circle(x, b.maxY - inset * k, r * k)).union(circle(x, b.minY + inset * k, r * k))
+        }
+        for y in spread(b.minY + inset, b.maxY - inset) {
+            path = path.union(circle(b.minX + inset, y, r)).union(circle(b.maxX - inset, y, r))
+        }
+        return path
+    }
+
+    private static func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> CGPath {
+        CGPath(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r), transform: nil)
     }
 
     override func mouseDown(with event: NSEvent) { pressed = onClick != nil }
@@ -83,7 +100,7 @@ class BubblePanel: NSPanel {
     /// Sizes the bubble and puts its tail tip just above `head` (screen points), kept on screen.
     func place(height: CGFloat, head: NSPoint) {
         let screen = (NSScreen.screens.first { $0.frame.contains(head) } ?? NSScreen.main)?.visibleFrame ?? .zero
-        let x = min(max(head.x - 30, screen.minX + 4), screen.maxX - frame.width - 4)
+        let x = min(max(head.x - 36, screen.minX + 4), screen.maxX - frame.width - 4)
         let y = min(head.y + 2, screen.maxY - height)
         setFrame(NSRect(x: x, y: y, width: frame.width, height: height), display: true)
         bubble.tailX = head.x - x
@@ -102,7 +119,7 @@ final class SpeechBubble: BubblePanel {
     var onClick: (() -> Void)? { didSet { bubble.onClick = { [weak self] in self?.orderOut(nil); self?.onClick?() } } }
 
     init() {
-        super.init(width: 240)
+        super.init(width: 214 + 23 + 2 * BubbleView.puff)     // the text, its padding, and room for the bumps
         label.font = BubbleView.font
         bubble.addSubview(label)
     }
@@ -111,8 +128,8 @@ final class SpeechBubble: BubblePanel {
         self.text = text
         label.stringValue = text
         let h = ceil(label.cell!.cellSize(forBounds: NSRect(x: 0, y: 0, width: 214, height: 400)).height)
-        label.frame = NSRect(x: 13, y: BubbleView.tail + 9, width: 214, height: h)
-        place(height: h + BubbleView.tail + 19, head: head)
+        label.frame = NSRect(x: BubbleView.puff + 11.5, y: BubbleView.tail + 7.5, width: 214, height: h)
+        place(height: h + 16 + BubbleView.tail + BubbleView.puff, head: head)
         orderFrontRegardless()
         pop()
         hide(after: seconds)
