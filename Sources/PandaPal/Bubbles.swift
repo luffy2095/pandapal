@@ -100,8 +100,11 @@ class BubblePanel: NSPanel {
     /// Sizes the bubble and puts its tail tip just above `head` (screen points), kept on screen.
     func place(height: CGFloat, head: NSPoint) {
         let screen = (NSScreen.screens.first { $0.frame.contains(head) } ?? NSScreen.main)?.visibleFrame ?? .zero
-        let x = min(max(head.x - 36, screen.minX + 4), screen.maxX - frame.width - 4)
-        let y = min(head.y + 2, screen.maxY - height)
+        var x = min(max(head.x - 36, screen.minX + 4), screen.maxX - frame.width - 4)
+        let y = max(min(head.y + 2, screen.maxY - height), screen.minY)
+        if y < head.y + 2, let panda = anchor?.frame {   // no room above: beside Bao, so the bubble never hides its head
+            x = panda.midX > screen.midX ? panda.minX - frame.width : panda.maxX
+        }
         setFrame(NSRect(x: x, y: y, width: frame.width, height: height), display: true)
         bubble.tailX = head.x - x
         if let anchor, parent == nil { anchor.addChildWindow(self, ordered: .above) }

@@ -5,12 +5,13 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p build
 
-swiftc -o build/check Sources/PandaPal/Brain.swift Sources/PandaPal/Personality.swift Sources/PandaPal/Rewards.swift Sources/PandaPal/Words.swift Tests/main.swift && ./build/check
+swiftc -o build/check Sources/PandaPal/Brain.swift Sources/PandaPal/Personality.swift Sources/PandaPal/Rewards.swift Sources/PandaPal/Words.swift Sources/PandaPal/Agents.swift Tests/main.swift
+./build/check      # its own line, so set -e stops the build when a test fails
 
 APP=build/PandaPal.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp Resources/AppIcon.icns Resources/hook.sh "$APP/Contents/Resources/"
 swiftc -O -swift-version 5 -target arm64-apple-macos26.0 -o "$APP/Contents/MacOS/PandaPal" Sources/PandaPal/*.swift
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -20,7 +21,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>dev.luffy2095.pandapal</string>
   <key>CFBundleName</key><string>PandaPal</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0.2</string>
+  <key>CFBundleShortVersionString</key><string>1.1.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>26.0</string>

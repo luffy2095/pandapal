@@ -163,7 +163,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let temper = Temper(rawValue: brain.memory.temper)
         personality.temper = temper
         panda.temper = temper
-        panda.show(mood)
+        panda.show(mood == .napping && now < panda.awakeUntil ? .eating : mood)
         panda.gift = Gift(rawValue: brain.memory.giftToday)
         if let cue, panel?.occlusionState.contains(.visible) == true { panda.cue(cue) }
         if let treat, canBeSeen { panda.treat(treat) }
@@ -236,12 +236,53 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let size = menu.addItem(withTitle: "Size", action: nil, keyEquivalent: "")
         size.submenu = sizes
+        menu.addItem(withTitle: "Connect coding agents…", action: #selector(connectAgents), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit PandaPal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     @objc func pet() { gesture(.tap) }
     @objc func breathe() { panda.breathe(cycles: 5) }
+
+    /// Adds Bao's hooks to the coding agents on this Mac, after asking which model writes the short lines.
+    @objc func connectAgents() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let found = Agents.found(home: home)
+        let alert = NSAlert()
+        alert.messageText = "Connect coding agents"
+        NSApp.activate()
+        guard !found.isEmpty else {
+            alert.informativeText = "No coding agents found. Bao works with Claude Code, Codex and opencode."
+            alert.runModal()
+            return
+        }
+        alert.informativeText = "Bao will tell you when \(found.joined(separator: ", ")) need you: a permission prompt, "
+            + "a question, or finished work.\n\nWhich model reads an agent's last reply and writes Bao's short line?"
+        let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
+        pick.addItems(withTitles: Agents.summarizers.map(\.title))
+        let current = (try? String(contentsOf: Agents.summarizerFile(home), encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pick.selectItem(at: Agents.summarizers.firstIndex { $0.value == current } ?? 0)
+        alert.accessoryView = pick
+        alert.addButton(withTitle: "Connect")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Disconnect")
+        let answer = alert.runModal()
+        guard answer != .alertSecondButtonReturn else { return }
+        let connect = answer == .alertFirstButtonReturn
+        let done = NSAlert()
+        do {
+            let agents = try Agents.connect(home: home, bao: connect ? Bundle.main.executablePath : nil,
+                                            summarizer: Agents.summarizers[pick.indexOfSelectedItem].value)
+            done.messageText = (connect ? "Connected " : "Disconnected ") + agents.joined(separator: ", ")
+            if connect, agents.contains("Codex") { done.informativeText = "In Codex, type /hooks once and trust Bao's two hooks." }
+            if connect { panda.cue(.news) }
+        } catch {
+            done.messageText = "Bao could not change an agent's settings"
+            done.informativeText = error.localizedDescription
+        }
+        done.runModal()
+    }
 
     /// Your mouse, through the panda's personality. Affection makes it happy for a minute.
     func gesture(_ g: Gesture) {
@@ -382,9 +423,10 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Bao's line in her bubble, mouth moving as it appears.
-    func speak(_ line: String, seconds: Double = 9) {
+    func speak(_ line: String, seconds: Double = 9, talks: Bool = true) {
         lineWaiting = false                   // a new line replaces the one waiting for an answer
         bubble.show(line, head: head(), seconds: seconds)
+        guard talks else { return }           // a script's message plays its own emotion instead
         Task { @MainActor in
             panda.talking(true)
             try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -392,7 +434,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// A script sent words with `PandaPal --say "…"`. Bao waves and says them. The bubble goes 15 seconds after you
+    /// A script sent words with `PandaPal --say "…"`. Bao jumps up with a "!" and says them. The bubble goes 15 seconds after you
     /// are at your Mac: at once if you are, or once you move the mouse or type if you were away. A click puts it away
     /// sooner. When nobody can see Bao, a notification carries the words instead.
     @objc func heard(_ note: Notification) {
@@ -403,8 +445,16 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         let line = "\(text) \(face())"
-        panda.cue(.remind)
-        speak(line, seconds: 3600)
+        // a message wakes Bao, and its sleep timer starts over: the nap after a break's length, the doze after 25 minutes
+        let now = Date()
+        if brain.mood(now) == .napping {
+            panda.awakeUntil = now.addingTimeInterval(brain.settings.breakMinutes * 60)
+            panda.show(.eating)
+        } else if brain.mood(now) == .eating, brain.stretchMinutes(now) >= 25 {
+            panda.awakeUntil = now.addingTimeInterval(25 * 60)
+        }
+        panda.cue(.news)
+        speak(line, seconds: 3600, talks: false)
         bubble.nudge()
         pinned = line
         pinTimer?.invalidate()
@@ -459,6 +509,15 @@ if let i = CommandLine.arguments.firstIndex(of: "--say") {
         exit(1)
     }
     exit(0)
+}
+
+if let i = CommandLine.arguments.firstIndex(of: "--hook") {
+    // A coding agent's hook: the bundled script reads the event on stdin and makes Bao speak through --say.
+    guard let script = Bundle.main.path(forResource: "hook", ofType: "sh"), let me = Bundle.main.executablePath else { exit(1) }
+    setenv("BAO", me, 1)
+    var argv = (["/bin/sh", script] + CommandLine.arguments.dropFirst(i + 1)).map { strdup($0) } + [nil]
+    execv("/bin/sh", &argv)
+    exit(1)
 }
 
 if let i = CommandLine.arguments.firstIndex(of: "--snapshot") {

@@ -10,7 +10,7 @@ final class TextPandaView: PandaShell {
         case eat, chomp, blink, lookL, lookR, sneeze1, sneeze2, hiccup, drop1, drop2,
              wave1, wave2, stretch1, stretch2, sip1, sip2, hi, happy1, happy2, yawn1, yawn2, curl, nap1, nap2, nap3, pet, oops,
              gaze, sun, hi5, giggle1, giggle2, dizzy, shy, angry1, angry2, pout, hug, dangle1, dangle2, curiousL, curiousR, grumble, cheer,
-             talk1, talk2, calm, lookFar, shake1, shake2, tide1, tide2, tide3, juggle1, juggle2
+             talk1, talk2, calm, lookFar, shake1, shake2, tide1, tide2, tide3, juggle1, juggle2, news1, news2
     }
 
     /// Each frame, line by line. Raw strings keep the backslashes literal.
@@ -65,6 +65,8 @@ final class TextPandaView: PandaShell {
         .tide3:     [" ●   ●", "(~ᵔᴥᵔ)~", "  (_)"],                 // and over to the right
         .juggle1:   [" ●   ●  ╪", " (ᵔᴥᵔ)ノ ╪", " /(_)"],
         .juggle2:   [" ●   ●   ╪", " (ᵔᴥᵔ)ノ╪", " /(_)"],
+        .news1:     [" ●   ●", " (ʘᴥʘ)", #" /(_)\"#],                 // a script's message: wide awake,
+        .news2:     [" ●   ●", #"\(ʘᴥʘ)/"#, "  (_)"],                 // paws up
     ]
 
     /// Frames where it lies on its side: the upright panda in `body` is drawn, then turned a quarter so its head
@@ -208,7 +210,7 @@ final class TextPandaView: PandaShell {
     private var dozing = false    // asleep on its side during deep focus, so it never distracts you
     private(set) var mood: Mood = .eating
 
-    var deepFocus: Bool { mood == .eating && focusMinutes >= 25 }
+    var deepFocus: Bool { mood == .eating && focusMinutes >= 25 && Date() >= awakeUntil }
 
     /// The top of the face "(●ᴥ●)", which fills columns 1 to 5 of the grid.
     override var headPoint: NSPoint { NSPoint(x: (Self.pad + 3.5 * Self.cellWidth) * Self.scale, y: bounds.maxY - Self.pad * Self.scale) }
@@ -407,6 +409,7 @@ final class TextPandaView: PandaShell {
     /// A short scene for each moment the brain picks.
     override func cue(_ cue: Cue) {
         guard !paused, !breathing else { return }
+        if dozing != deepFocus { applyPose() }        // a message woke it from its doze
         switch cue {
         case .gaze: flip([.gaze, .gaze, .gaze, .gaze, .blink, .eat], step: 0.8)
         case .lookAtYou:
@@ -424,6 +427,11 @@ final class TextPandaView: PandaShell {
         case .remind:                                                            // waves to get your attention
             flip([.wave1, .wave2, .wave1, .wave2, .wave1, .wave2, .hi, .hi], step: 0.35)
             move("transform.translation.y", [0, 6, 0, 6, 0], 1.2)
+        case .news:                                                              // jumps up with a "!" at a message
+            flip([.news1, .news2, .news1, .news2, .news1, .hi, .hi], step: 0.3)
+            move("transform.translation.y", [0, 9, 0, 4, 0], 0.8)
+            motes([Mote(text: "!", size: 18, color: Self.fill("☆", dark: dark), path: [at(7.2, 50), at(7.8, 66)],
+                        duration: 1.6, scales: [0.3, 1.4, 1])])
         }
     }
 

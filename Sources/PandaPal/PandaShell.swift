@@ -12,6 +12,7 @@ class PandaShell: NSView {
     var temper: Temper?                 // today's mood, which colours some of its moments
     var cursorSide = 0                  // -1 left, 0 near, 1 right: where to glance during a moment
     var gift: Gift?                     // today's gift, which sits beside the panda
+    var awakeUntil = Date.distantPast   // a script's message woke it: no nap or doze before this
     var headPoint: NSPoint { NSPoint(x: bounds.midX, y: bounds.maxY) }   // where speech bubbles point
 
     func show(_ mood: Mood) {}

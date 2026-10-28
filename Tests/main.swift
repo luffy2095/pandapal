@@ -277,4 +277,49 @@ let gaps = zip(gazes.dropFirst(), gazes).map { $0.timeIntervalSince($1) }
 precondition(gaps.count >= 2 && gaps[1] > gaps[0] && eyes.rate(.gaze) < 1, "ignored eye-rest nudges come less often, got \(gaps)")
 print("rewards ok")
 
+
+// Connecting agents: other settings and hooks stay, Bao's hook appears once, and disconnecting takes only Bao's out.
+let claudeEvents: [(String, String?)] = [("Notification", "permission_prompt|elicitation_dialog"), ("Stop", nil)]
+let rtk: [String: Any] = ["matcher": "Bash", "hooks": [["type": "command", "command": "rtk hook claude"]]]
+let handMade: [String: Any] = ["hooks": [["type": "command", "command": "sh ~/.config/pandapal/hook.sh claude 2>/dev/null || true"]]]
+let start: [String: Any] = ["model": "fable", "hooks": ["PreToolUse": [rtk], "Stop": [handMade]]]
+let cmd = "\"/Applications/PandaPal.app/Contents/MacOS/PandaPal\" --hook claude"
+let joined = Agents.merged(start, events: claudeEvents, command: cmd)
+func baoHooks(_ j: [String: Any], _ event: String) -> [[String: Any]] {
+    ((j["hooks"] as? [String: Any])?[event] as? [[String: Any]] ?? []).filter {
+        ($0["hooks"] as? [[String: Any]] ?? []).contains { Agents.isBao($0["command"] as? String ?? "") }
+    }
+}
+precondition(joined["model"] as? String == "fable", "other settings stay")
+precondition(((joined["hooks"] as? [String: Any])?["PreToolUse"] as? [[String: Any]])?.count == 1, "other tools' hooks stay")
+precondition(baoHooks(joined, "Stop").count == 1 && baoHooks(joined, "Notification").count == 1, "one Bao hook per event")
+precondition(baoHooks(joined, "Notification")[0]["matcher"] as? String == "permission_prompt|elicitation_dialog", "matcher set")
+precondition(!"\(joined)".contains("pandapal/hook.sh"), "the old hand-made hook is replaced")
+let twice = Agents.merged(joined, events: claudeEvents, command: cmd)
+precondition(baoHooks(twice, "Stop").count == 1, "connecting twice keeps one hook")
+let gone = Agents.merged(twice, events: claudeEvents, command: nil)
+precondition(baoHooks(gone, "Stop").isEmpty && (gone["hooks"] as? [String: Any])?["Stop"] == nil, "disconnect takes Bao's out")
+precondition(((gone["hooks"] as? [String: Any])?["PreToolUse"] as? [[String: Any]])?.count == 1, "and leaves the rest")
+let shared: [String: Any] = ["hooks": ["Stop": [["hooks": [["type": "command", "command": "other-tool"],
+                                                          ["type": "command", "command": cmd]]]]]]
+let kept = Agents.merged(shared, events: [("Stop", nil)], command: nil)
+precondition("\(kept)".contains("other-tool") && !"\(kept)".contains("--hook"), "a shared group keeps the other tool's hook")
+
+// The file: permissions and a backup are kept, and a file that is not JSON is never overwritten.
+let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pandapal-test-\(UUID().uuidString)")
+try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+let settings = dir.appendingPathComponent("settings.json")
+try! #"{"model": "fable", "env": {"KEY": "secret"}}"#.write(to: settings, atomically: true, encoding: .utf8)
+try! FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: settings.path)
+try! Agents.edit(settings, events: claudeEvents, command: cmd)
+let mode = (try! FileManager.default.attributesOfItem(atPath: settings.path)[.posixPermissions] as! NSNumber).intValue
+precondition(mode == 0o600, "the settings file stays private, got \(String(mode, radix: 8))")
+precondition(FileManager.default.fileExists(atPath: settings.path + ".pandapal-backup"), "a backup is saved")
+let broken = dir.appendingPathComponent("broken.json")
+try! "{ not json".write(to: broken, atomically: true, encoding: .utf8)
+precondition((try? Agents.edit(broken, events: claudeEvents, command: cmd)) == nil, "a file that is not JSON fails")
+precondition((try! String(contentsOf: broken, encoding: .utf8)) == "{ not json", "and stays as it was")
+try? FileManager.default.removeItem(at: dir)
+print("agents ok")
+
 print("brain ok:\(cues.count) cues in the last scene, bond \(b.memory.bond), level \(b.bondLevel)")

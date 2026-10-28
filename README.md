@@ -4,7 +4,7 @@
 
 # PandaPal
 
-A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on long screen days, and it reminds you to rest your eyes, move, drink water and go to bed, by showing those needs as its own. No AI, no network, no account.
+A coding companion for your Mac. Bao, a tiny text-art panda, tells you in one short line when Claude Code, Codex or opencode need you, and keeps you company while they work. Between runs it is a sweet distraction that reminds you to rest your eyes, move, drink water and go to bed.
 
 <p align="center">
   <picture>
@@ -13,12 +13,14 @@ A tiny text-art panda that lives on your Mac's screen. Bao keeps you company on 
   </picture>
 </p>
 
+- **Tells you when your agents need you.** A permission prompt, a question, or finished work, with the session's name: "stocks · Run stopped before writing anything." Connect your agents from Bao's menu.
+- **Quiet until it matters.** A small model reads each finished turn, and Bao speaks only when you are needed. A message wakes Bao from a nap, and during calls it goes to a notification instead.
 - **Looks after you, gently.** Eye rests, breaks, water, daylight and bedtime, with 13 break ideas that Bao acts out. It asks at most twice an hour, never while you type, and stays quiet during calls.
 - **Has a personality.** Pet it, tickle it, wave at it, drag it around. It giggles, dances, gets dizzy, sulks and forgives, and it has a mood each day.
 - **Breathes with you.** A one-minute breathing exercise from its menu.
-- **Says what your scripts tell it.** `PandaPal --say "Tests passed!"` and Bao waves and says it.
+- **Says what your scripts tell it.** `PandaPal --say "Tests passed!"` and Bao jumps up and says it.
 - **Rewards care, not screen time.** Bond, tricks and gifts come from breaks. Videos and calls do not count as breaks.
-- **Private and light.** No network, no account, one small file. About 0.14% CPU and 32 MB of memory, measured.
+- **Private and light.** Bao has no AI and no network of its own, and no account. About 0.14% CPU and 32 MB of memory, measured.
 
 ## Download
 
@@ -113,6 +115,27 @@ It asks at most twice an hour, never interrupts while you type, and "Snooze brea
 
 Play earns bond only through its capped surprises. Its patience refills within a couple of minutes.
 
+## Coding agents
+
+Choose **Connect coding agents…** from Bao's menu. Bao finds Claude Code (in the terminal and in the Claude app), Codex and opencode, asks which model writes its short lines, and adds its hooks to each agent's settings. In Codex, type `/hooks` once and trust Bao's two hooks. **Disconnect** in the same window takes them out again.
+
+Then Bao jumps up with a "!" and says:
+
+- **A permission prompt or a question**, in the agent's own words: "D2D · Claude needs your permission to use Bash".
+- **Finished work, a decision for you, or a failure**, in one short line that a small model writes from the agent's last reply: "stocks · Run stopped before writing anything; schedule still active." When the turn needs nothing from you, Bao stays quiet.
+
+The line starts with the session's name: the one you gave it with `/rename`, else the agent's own title, else the folder. If Bao naps or dozes when a message comes, it wakes up, and its sleep timer starts over.
+
+| Model for short lines | How | Time, measured |
+|---|---|---|
+| Each agent's own model (default) | Claude Haiku for Claude Code, GPT-5.6 Luna for Codex | 2.2 to 3.7 s, 4.6 to 11.0 s |
+| Claude Haiku | `claude -p`, with no tools, MCP servers, hooks, CLAUDE.md or saved session | 2.2 to 3.7 s, about 800 tokens |
+| GPT-5.6 Luna | `codex exec`, read-only and not saved | 4.6 to 11.0 s |
+| Gemini Flash | `gemini -p`; never opens a login page | not measured |
+| None | Only prompts and questions; finished turns stay on your Mac | |
+
+Each line runs in the background, so an agent never waits for Bao, and a call stops after 60 seconds. It uses your own agent's login and plan: a Claude Haiku line cost $0.00015 to $0.00026 at API prices, measured.
+
 ## Make Bao say things
 
 Any script can hand Bao the words to say:
@@ -121,7 +144,7 @@ Any script can hand Bao the words to say:
 /Applications/PandaPal.app/Contents/MacOS/PandaPal --say "Tests passed!"
 ```
 
-Bao waves and says it in its bubble. The bubble goes 15 seconds after you are at your Mac: at once if you are using it, or, if you were away, 15 seconds after you move the mouse or type. A click puts it away sooner. When nobody can see Bao (it is hidden, a full-screen app covers it, or the screen is locked) or you are in a call, a macOS notification titled "Bao says" carries the words instead. macOS keeps notifications off a shared screen. Bao says the words exactly as given, on one line, up to 200 characters, and saves nothing. The words go straight to Bao: other apps cannot listen in, and sandboxed apps cannot send any. The command exits with 0 when the words were sent, 1 when PandaPal is not running, and 2 when there is nothing to say.
+Bao jumps up and says it in its bubble. The bubble goes 15 seconds after you are at your Mac: at once if you are using it, or, if you were away, 15 seconds after you move the mouse or type. A click puts it away sooner. When nobody can see Bao (it is hidden, a full-screen app covers it, or the screen is locked) or you are in a call, a macOS notification titled "Bao says" carries the words instead. macOS keeps notifications off a shared screen. Bao says the words exactly as given, on one line, up to 200 characters, and saves nothing. The words go straight to Bao: other apps cannot listen in, and sandboxed apps cannot send any. The command exits with 0 when the words were sent, 1 when PandaPal is not running, and 2 when there is nothing to say.
 
 For example, with an alias in your shell profile:
 
@@ -146,7 +169,8 @@ It builds with `swiftc` directly, not the Swift package manager, because the pac
 ## Privacy
 
 - It reads: whether the screen is locked or asleep, how many seconds since the last key or mouse event, and the clock. It also reads whether some app is using a camera or recording a microphone, and whether some app keeps the display awake. macOS answers each of these with only on or off, with no permission and nothing about who you talk to or what you watch. During its moments it reads where the pointer is, to glance that way, and keeps nothing. It never sees what you type, which app you use, or what is on screen.
-- It needs no permissions, makes no network connections, and has no AI.
+- It needs no permissions, makes no network connections, and has no AI of its own.
+- When you connect coding agents, a finished turn's last reply goes to the model you chose, through that agent's own command-line tool, to write Bao's short line. By default that is the company that wrote the reply. Choose None to keep finished turns on your Mac. Connecting changes only Bao's own entries in each agent's settings, keeps the file private, and saves a backup copy beside it first.
 - The only permission it may ask for is notifications, once, the first time it sends its break notification or shows words from a script while nobody can see it.
 - It saves one small file, `~/Library/Application Support/PandaPal/memory.json`: bond, today's date, today's breaks and eye rests, longest stretch today, which daily moments already happened, when it last saw you, the same counts for your last day, today's mood, how many of each gift it found, today's gift and play surprises, and two numbers for how often you answer its lines and eye-rest nudges. Its size and spot on screen are kept in its preferences.
 
@@ -179,7 +203,9 @@ The panda needs no art files. Each frame is three lines of Menlo, drawn to an im
 - `Sources/PandaPal/Bubbles.swift`: the speech bubble.
 - `Sources/PandaPal/PandaShell.swift`: the panda's mouse handling: petting, dragging, tickles, waves, hover and the menu.
 - `Sources/PandaPal/TextPandaView.swift`: the panda, its frames, its effects and its breathing.
-- `Sources/PandaPal/main.swift`: the menu bar, the floating window, system events, `--say`, and the saved file.
+- `Sources/PandaPal/main.swift`: the menu bar, the floating window, system events, `--say`, `--hook`, and the saved file.
+- `Sources/PandaPal/Agents.swift`: "Connect coding agents…": adds and removes Bao's hooks in each agent's settings.
+- `Resources/hook.sh`: the hook the agents run through `PandaPal --hook`. It names the session and asks the chosen model for a short line.
 - `Tests/main.swift`: the behaviour, personality, reward and word tests, run by `build.sh`.
 - `Resources/AppIcon.icns`: the app icon, made from `docs/icon.png`.
 - `./build/PandaPal.app/Contents/MacOS/PandaPal --snapshot <dir>` renders every frame and each gift to PNG, to check the art without a screen.

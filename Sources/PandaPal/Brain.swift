@@ -3,7 +3,7 @@ import Foundation
 enum Mood { case eating, wantsBreak, happy, napping }
 
 /// One-off moments the brain asks the panda to play.
-enum Cue: Equatable, Hashable { case gaze, lookAtYou, sip, sun, morning, sleepy, reunion, remind }
+enum Cue: Equatable, Hashable { case gaze, lookAtYou, sip, sun, morning, sleepy, reunion, remind, news }
 
 /// Moments Bao starts that you may answer or ignore. Bao learns how often you answer each, and does the ignored ones less.
 enum Nudge: String { case line, gaze }
