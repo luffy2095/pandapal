@@ -22,9 +22,13 @@ A coding companion for your Mac. Bao, a tiny text-art panda, tells you in one sh
 - **Rewards care, not screen time.** Bond, tricks and gifts come from breaks. Videos and calls do not count as breaks.
 - **Private and light.** Bao has no AI and no network of its own, and no account. About 0.14% CPU and 32 MB of memory, measured.
 
-## Download
+## Setup
 
-1. Download the `PandaPal` zip from [the latest release](https://github.com/luffy2095/pandapal/releases/latest). It needs macOS 26 or later on Apple silicon.
+PandaPal needs macOS 26 or later on Apple silicon. Get it one of two ways, then connect your coding agents.
+
+### Option 1: download
+
+1. Download the `PandaPal` zip from [the latest release](https://github.com/luffy2095/pandapal/releases/latest).
 2. Unzip it and move `PandaPal.app` to your Applications folder.
 3. Open it. PandaPal is free and not notarized by Apple, so macOS blocks the first open. Open System Settings, then Privacy & Security, scroll down, and click "Open Anyway" next to PandaPal. Or run this once in Terminal:
 
@@ -32,7 +36,23 @@ A coding companion for your Mac. Bao, a tiny text-art panda, tells you in one sh
 xattr -dr com.apple.quarantine /Applications/PandaPal.app
 ```
 
-Bao appears at the bottom right of your screen. Right-click it, or click 🐼 in the menu bar, for the menu. To start PandaPal at login: System Settings, General, Login Items, then add PandaPal.
+### Option 2: build from source
+
+Needs the Xcode command line tools with the macOS 26 SDK or newer (Swift 6.2+). Quit PandaPal first if it runs.
+
+```sh
+git clone https://github.com/luffy2095/pandapal.git
+cd pandapal
+./build.sh                      # runs the behaviour tests, then builds build/PandaPal.app
+ditto build/PandaPal.app /Applications/PandaPal.app
+open /Applications/PandaPal.app
+```
+
+An app you build yourself opens without the "Open Anyway" step. Run it from Applications, not from `build/`: each build deletes `build/PandaPal.app` first, and the agents' hooks would stop working meanwhile. It builds with `swiftc` directly, not the Swift package manager, because the package manager in Command Line Tools 27.0 cannot build manifests on this Mac.
+
+### Then: connect your coding agents
+
+Bao appears at the bottom right of your screen. Right-click it, or click 🐼 in the menu bar, for the menu, and choose **Connect coding agents…** ([more below](#coding-agents)). To start PandaPal at login: System Settings, General, Login Items, then add PandaPal.
 
 <p align="center">
   <picture>
@@ -152,19 +172,6 @@ For example, with an alias in your shell profile:
 alias bao='/Applications/PandaPal.app/Contents/MacOS/PandaPal --say'
 make test && bao "Tests passed!" || bao "Tests failed. Hmph."
 ```
-
-## Build from source
-
-Needs macOS 26 or later and the Xcode command line tools with the macOS 26 SDK or newer (Swift 6.2+).
-
-```sh
-git clone https://github.com/luffy2095/pandapal.git
-cd pandapal
-./build.sh                      # runs the behaviour tests, then builds build/PandaPal.app
-open build/PandaPal.app
-```
-
-It builds with `swiftc` directly, not the Swift package manager, because the package manager in Command Line Tools 27.0 cannot build manifests on this Mac.
 
 ## Privacy
 
