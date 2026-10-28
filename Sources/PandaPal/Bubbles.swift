@@ -3,8 +3,16 @@ import AppKit
 /// Bao's speech bubble: a thought cloud with two small puffs drifting down to its head, outlined like the
 /// panda's own rim.
 final class BubbleView: NSView {
-    static let tail: CGFloat = 19.5               // room under the cloud for the two puffs
-    static let puff: CGFloat = 7                  // room around the cloud's body for its bumps and outline
+    static let tail: CGFloat = 24.5               // room under the cloud for the two puffs and their glow
+    static let puff: CGFloat = 12                 // room around the cloud's body for its bumps, outline and glow
+    /// A soft light around the outline in dark mode, so the cloud stands apart from a dark code screen.
+    static let glow: NSShadow = {
+        let s = NSShadow()
+        s.shadowColor = NSColor(white: 1, alpha: 0.35)
+        s.shadowBlurRadius = 4.5
+        s.shadowOffset = .zero
+        return s
+    }()
     static let font: NSFont = {
         let f = NSFont.systemFont(ofSize: 13)
         return NSFont(descriptor: f.fontDescriptor.withDesign(.rounded) ?? f.fontDescriptor, size: 13) ?? f
@@ -16,10 +24,13 @@ final class BubbleView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let body = NSRect(x: Self.puff, y: Self.tail, width: bounds.width - 2 * Self.puff, height: bounds.height - Self.tail - Self.puff)
         let x = min(max(tailX, body.minX + 16), body.maxX - 16)
-        let shapes = [Self.cloud(body), Self.circle(x - 1, 12.5, 4.5), Self.circle(x - 5, 4.5, 2.6)].map { NSBezierPath(cgPath: $0) }
+        let shapes = [Self.cloud(body), Self.circle(x - 1, 17.5, 4.5), Self.circle(x - 5, 9.5, 2.6)].map { NSBezierPath(cgPath: $0) }
         NSColor.labelColor.withAlphaComponent(0.8).setStroke()
         (pressed ? NSColor.textBackgroundColor.blended(withFraction: 0.18, of: .labelColor)! : NSColor.textBackgroundColor).setFill()
+        NSGraphicsContext.saveGraphicsState()
+        if effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua { Self.glow.set() }
         for p in shapes { p.lineWidth = 3; p.stroke() }    // the fills cover the inner half: a 1.5 pt outline
+        NSGraphicsContext.restoreGraphicsState()
         for p in shapes { p.fill() }
     }
 
@@ -100,9 +111,9 @@ class BubblePanel: NSPanel {
     /// Sizes the bubble and puts its tail tip just above `head` (screen points), kept on screen.
     func place(height: CGFloat, head: NSPoint) {
         let screen = (NSScreen.screens.first { $0.frame.contains(head) } ?? NSScreen.main)?.visibleFrame ?? .zero
-        var x = min(max(head.x - 36, screen.minX + 4), screen.maxX - frame.width - 4)
-        let y = max(min(head.y + 2, screen.maxY - height), screen.minY)
-        if y < head.y + 2, let panda = anchor?.frame {   // no room above: beside Bao, so the bubble never hides its head
+        var x = min(max(head.x - 41, screen.minX + 4), screen.maxX - frame.width - 4)
+        let y = max(min(head.y - 3, screen.maxY - height), screen.minY)
+        if y < head.y - 3, let panda = anchor?.frame {   // no room above: beside Bao, so the bubble never hides its head
             x = panda.midX > screen.midX ? panda.minX - frame.width : panda.maxX
         }
         setFrame(NSRect(x: x, y: y, width: frame.width, height: height), display: true)

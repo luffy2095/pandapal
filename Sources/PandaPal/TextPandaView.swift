@@ -10,7 +10,8 @@ final class TextPandaView: PandaShell {
         case eat, chomp, blink, lookL, lookR, sneeze1, sneeze2, hiccup, drop1, drop2,
              wave1, wave2, stretch1, stretch2, sip1, sip2, hi, happy1, happy2, yawn1, yawn2, curl, nap1, nap2, nap3, pet, oops,
              gaze, sun, hi5, giggle1, giggle2, dizzy, shy, angry1, angry2, pout, hug, dangle1, dangle2, curiousL, curiousR, grumble, cheer,
-             talk1, talk2, calm, lookFar, shake1, shake2, tide1, tide2, tide3, juggle1, juggle2, news1, news2
+             talk1, talk2, calm, lookFar, shake1, shake2, tide1, tide2, tide3, juggle1, juggle2, news1, news2,
+             armsOut, exhale1, exhale2, exhale3
     }
 
     /// Each frame, line by line. Raw strings keep the backslashes literal.
@@ -67,6 +68,10 @@ final class TextPandaView: PandaShell {
         .juggle2:   [" ●   ●   ╪", " (ᵔᴥᵔ)ノ╪", " /(_)"],
         .news1:     [" ●   ●", " (ʘᴥʘ)", #" /(_)\"#],                 // a script's message: wide awake,
         .news2:     [" ●   ●", #"\(ʘᴥʘ)/"#, "  (_)"],                 // paws up
+        .armsOut:   [" ●   ●", "-(-ᴥ-)-", "  (_)"],                   // breathing in: arms rise through here
+        .exhale1:   [" ●   ●", #"\(-o-)/"#, "  (_)"],                 // breathing out: mouth open, arms coming down
+        .exhale2:   [" ●   ●", "-(-o-)-", "  (_)"],
+        .exhale3:   [" ●   ●", " (-o-)", #" /(_)\"#],
     ]
 
     /// Frames where it lies on its side: the upright panda in `body` is drawn, then turned a quarter so its head
@@ -131,6 +136,16 @@ final class TextPandaView: PandaShell {
     /// Pixels per point in the frame images: Retina, and more when Bao is large, so text stays sharp.
     static var density: CGFloat { 2 * max(1, scale) }
 
+    /// A soft light around the glyphs in dark mode, so Bao stands apart from white text on a dark code screen.
+    /// 3.5 pt fits in `pad`, so no frame cuts it off.
+    static let glow: NSShadow = {
+        let s = NSShadow()
+        s.shadowColor = NSColor(white: 1, alpha: 0.55)
+        s.shadowBlurRadius = 3.5
+        s.shadowOffset = .zero
+        return s
+    }()
+
     /// Draws every character centred in its own grid cell, like a terminal.
     static func render(_ lines: [String], dark: Bool) -> CGImage {
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * density), pixelsHigh: Int(size.height * density),
@@ -140,6 +155,7 @@ final class TextPandaView: PandaShell {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         for rim in [true, false] {
+            if dark && !rim { glow.set() }           // until restored below: the glyphs glow, the rim does not
             for (row, line) in lines.enumerated() {
                 let y = size.height - pad - CGFloat(row + 1) * lineHeight
                 // a word is two or more letters, maybe with "!"; it starts at its column, in the smaller font
@@ -675,8 +691,9 @@ final class TextPandaView: PandaShell {
         sayLayer.add(a, forKey: "say")
     }
 
-    /// Breathing together: its body swells as you breathe in for 4 seconds, holds for 4, and settles as you breathe
-    /// out for 4, with the word beside it. At the end it is happy with you.
+    /// Breathing together, 4 seconds each: breathing in, its arms rise, its chest fills and air drifts to its nose;
+    /// holding, it stays still with its arms up; breathing out, its mouth opens, its arms come down and a puff drifts
+    /// out. The word beside it gains a dot each second, to count by. At the end it is happy with you.
     private var breathEnd: Date?
     private var breathing: Bool { breathEnd.map { Date() < $0 } ?? false }
 
@@ -685,18 +702,41 @@ final class TextPandaView: PandaShell {
         let cycle = 12.0, total = cycle * Double(cycles)
         breathEnd = Date().addingTimeInterval(total)
         face.removeAnimation(forKey: "burst")
-        flip([.calm], step: total, key: "breathe")
-        let swell = CAKeyframeAnimation(keyPath: "transform.scale")
-        swell.values = [0, 0.08, 0.08, 0]
-        swell.keyTimes = (0...3).map { NSNumber(value: Double($0) / 3) }
-        swell.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 3)
-        swell.isAdditive = true
-        swell.duration = cycle
-        swell.repeatCount = Float(cycles)
-        holder.add(swell, forKey: "breathe")
+        flip([.calm, .armsOut, .stretch1, .stretch1, .stretch1, .stretch1, .stretch1, .stretch1, .exhale1, .exhale2, .exhale3, .calm],
+             step: 1, repeats: Float(cycles), key: "breathe")
+        for (axis, amount) in [("y", 0.09), ("x", 0.04)] {          // a chest fills upward more than outward
+            let swell = CAKeyframeAnimation(keyPath: "transform.scale.\(axis)")
+            swell.values = [0, amount, amount, 0]
+            swell.keyTimes = (0...3).map { NSNumber(value: Double($0) / 3) }
+            swell.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: 3)
+            swell.isAdditive = true
+            swell.duration = cycle
+            swell.repeatCount = Float(cycles)
+            holder.add(swell, forKey: "breathe.\(axis)")
+        }
+        let grey = NSColor(white: 0.6, alpha: 1)
+        for i in 0..<cycles {                                        // air in, then a puff out, only while still breathing
+            let start = Double(i) * cycle
+            DispatchQueue.main.asyncAfter(deadline: .now() + start) { [weak self] in
+                guard let self, self.breathing else { return }
+                self.motes((0..<3).map { k in
+                    Mote(text: "·", size: 14, color: grey, path: [self.at(7.5, 47), self.at(4.0, 42)], delay: Double(k) * 1.1,
+                         duration: 1.2, scales: [0.6, 1, 0.4])
+                })
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + start + 8.2) { [weak self] in
+                guard let self, self.breathing else { return }
+                self.motes((0..<3).map { k in
+                    Mote(text: "~", size: 13, color: grey, path: [self.at(3.6, 38), self.at(6.5, 46), self.at(8.5, 54)],
+                         delay: Double(k) * 1.1, duration: 1.6, scales: [0.4, 1, 1.3])
+                })
+            }
+        }
         let said = CAKeyframeAnimation(keyPath: "contents")
-        said.values = ["in", "hold", "out"].map { word in words[word] ?? Self.render(["        " + word], dark: dark) }
-        said.keyTimes = (0...3).map { NSNumber(value: Double($0) / 3) }
+        said.values = (0..<12).map { s in
+            Self.render(["        " + ["in", "hold", "out"][s / 4], "        " + String(repeating: "·", count: s % 4 + 1)], dark: dark)
+        }
+        said.keyTimes = (0...12).map { NSNumber(value: Double($0) / 12) }
         said.calculationMode = .discrete
         said.duration = cycle
         said.repeatCount = Float(cycles)
@@ -716,7 +756,8 @@ final class TextPandaView: PandaShell {
     private func stopBreathing() {
         breathEnd = nil
         face.removeAnimation(forKey: "breathe")
-        holder.removeAnimation(forKey: "breathe")
+        holder.removeAnimation(forKey: "breathe.y")
+        holder.removeAnimation(forKey: "breathe.x")
         sayLayer.removeAnimation(forKey: "breathe")
         sayLayer.removeAnimation(forKey: "breatheShown")
     }
