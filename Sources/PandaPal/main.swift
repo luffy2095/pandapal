@@ -19,6 +19,7 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var breaksSeen = -1                 // to notice a break that just ended
     var pinned: String?                 // a message from a script that is showing in the bubble
     var pinTimer: Timer?
+    var modelBox: NSComboBox?          // the Connect window's model box, while that window is open
     var sayPort: CFMessagePort?                // while it waits for you to come back
     var lineWaiting = false             // one of Bao's own lines is showing: will you answer it?
     var lineTimes: [Date] = []          // its lines in the last hour, at most four
@@ -263,23 +264,36 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         alert.informativeText = "Bao will tell you when \(found.joined(separator: ", ")) need you: a permission prompt, "
-            + "a question, or finished work.\n\nWhich model reads an agent's last reply and writes Bao's short line?"
-        let pick = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 280, height: 26), pullsDown: false)
-        pick.addItems(withTitles: Agents.summarizers.map(\.title))
-        let current = (try? String(contentsOf: Agents.summarizerFile(home), encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        pick.selectItem(at: Agents.summarizers.firstIndex { $0.value == current } ?? 0)
-        alert.accessoryView = pick
+            + "a question, or finished work.\n\nWhich model reads an agent's last reply and writes Bao's short line? "
+            + "Leave the model blank for the provider's default."
+        let saved = Agents.summarizer(home: home)
+        let provider = NSPopUpButton(frame: .zero, pullsDown: false)
+        provider.addItems(withTitles: Agents.providers.map(\.title))
+        provider.selectItem(at: Agents.providers.firstIndex { $0.tool == saved.tool } ?? 0)
+        provider.target = self
+        provider.action = #selector(providerChanged(_:))
+        let model = NSComboBox(frame: .zero)
+        modelBox = model
+        providerChanged(provider)
+        model.stringValue = saved.model
+        let grid = NSGridView(views: [[NSTextField(labelWithString: "Provider"), provider], [NSTextField(labelWithString: "Model"), model]])
+        grid.rowAlignment = .firstBaseline
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).width = 260
+        grid.frame.size = grid.fittingSize
+        alert.accessoryView = grid
         alert.addButton(withTitle: "Connect")
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Disconnect")
         let answer = alert.runModal()
+        modelBox = nil
         guard answer != .alertSecondButtonReturn else { return }
         let connect = answer == .alertFirstButtonReturn
         let done = NSAlert()
         do {
             let agents = try Agents.connect(home: home, bao: connect ? Bundle.main.executablePath : nil,
-                                            summarizer: Agents.summarizers[pick.indexOfSelectedItem].value)
+                                            summarizer: Agents.summarizerLine(tool: Agents.providers[provider.indexOfSelectedItem].tool,
+                                                                              model: model.stringValue))
             done.messageText = (connect ? "Connected " : "Disconnected ") + agents.joined(separator: ", ")
             if connect, agents.contains("Codex") { done.informativeText = "In Codex, type /hooks once and trust Bao's two hooks." }
             if connect { panda.cue(.news) }
@@ -288,6 +302,17 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             done.informativeText = error.localizedDescription
         }
         done.runModal()
+    }
+
+    /// The Connect window's model box follows the provider: its suggestions, its default, and off when there is no model to pick.
+    @objc func providerChanged(_ provider: NSPopUpButton) {
+        guard let box = modelBox else { return }
+        let p = Agents.providers[provider.indexOfSelectedItem]
+        box.removeAllItems()
+        box.addItems(withObjectValues: Agents.models(p.tool, home: FileManager.default.homeDirectoryForCurrentUser))
+        box.stringValue = ""
+        box.placeholderString = p.tool == "opencode" ? "opencode's default" : p.model.isEmpty ? "" : "Default: \(p.model)"
+        box.isEnabled = !p.tool.isEmpty && p.tool != "off"
     }
 
     /// Your mouse, through the panda's personality. Affection makes it happy for a minute.

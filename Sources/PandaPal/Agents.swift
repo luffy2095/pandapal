@@ -3,16 +3,49 @@ import Foundation
 /// Adds Bao's hooks to the coding agents on this Mac, and takes them out again. Each agent's settings keep
 /// everything else, the file keeps its permissions, and the first change saves a copy beside it.
 enum Agents {
-    /// Who writes Bao's short line when an agent finishes: a title for the menu, and the summarizer file's text.
-    static let summarizers: [(title: String, value: String)] = [
-        ("Each agent's own model", ""),
-        ("Claude Haiku", "claude haiku"),
-        ("GPT-5.6 Luna, through Codex", "codex gpt-5.6-luna"),
-        ("Gemini Flash, through Gemini CLI", "gemini gemini-2.5-flash"),
-        ("None: only prompts and questions", "off"),
+    /// Who writes Bao's short line when an agent finishes: the command-line tool that the summarizer file names, and
+    /// the model hook.sh uses when you leave the model blank. "" is each agent's own maker, and "off" is none.
+    static let providers: [(title: String, tool: String, model: String)] = [
+        ("Each agent's own model", "", ""),
+        ("Anthropic, through Claude Code", "claude", "haiku"),
+        ("OpenAI, through Codex", "codex", "gpt-5.6-luna"),
+        ("Google, through Gemini CLI", "gemini", "gemini-2.5-flash"),
+        ("Any provider, through opencode", "opencode", ""),
+        ("None: only prompts and questions", "off", ""),
     ]
 
     static func summarizerFile(_ home: URL) -> URL { home.appendingPathComponent("Library/Application Support/PandaPal/summarizer") }
+
+    /// The provider and model in the summarizer file, for example ("codex", "gpt-6-luna").
+    static func summarizer(home: URL) -> (tool: String, model: String) {
+        let line = (try? String(contentsOf: summarizerFile(home), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
+        return (parts.first ?? "", parts.count > 1 ? parts[1] : "")
+    }
+
+    /// The summarizer file's line: "", "off", "tool" or "tool model". hook.sh puts the model in a command, so only
+    /// the characters that model names use are kept.
+    static func summarizerLine(tool: String, model: String) -> String {
+        guard !tool.isEmpty, tool != "off" else { return tool }
+        let safe = String(String.UnicodeScalarView(model.unicodeScalars.filter {
+            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "._:/@-".unicodeScalars.contains($0))
+        }))
+        return safe.isEmpty ? tool : "\(tool) \(safe)"
+    }
+
+    /// Model names to suggest for a provider. Codex's come from its own model list, so they stay current.
+    static func models(_ tool: String, home: URL) -> [String] {
+        switch tool {
+        case "claude": return ["haiku", "sonnet", "opus"]
+        case "codex":
+            let data = FileManager.default.contents(atPath: home.appendingPathComponent(".codex/models_cache.json").path) ?? Data()
+            let list = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["models"] as? [[String: Any]] ?? []
+            let names = list.filter { $0["visibility"] as? String == "list" }.compactMap { $0["slug"] as? String }
+            return names.isEmpty ? ["gpt-5.6-luna"] : names
+        case "gemini": return ["gemini-2.5-flash"]
+        default: return []
+        }
+    }
 
     /// The agents installed for this user, by the folders they keep their settings in.
     static func found(home: URL) -> [String] {

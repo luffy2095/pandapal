@@ -327,6 +327,20 @@ try! #"{"hooks": {"Stop": [{"hooks": [{"command": "sh ~/.config/pandapal/hook.sh
 precondition(!Agents.connected(home: fakeHome), "the hand-made hook does not count as connected")
 try! Agents.edit(fakeSettings, events: claudeEvents, command: cmd)
 precondition(Agents.connected(home: fakeHome), "the app's hook counts as connected")
+// The provider and model for Bao's short lines: saved as one line, read back, and only safe characters reach hook.sh.
+precondition(Agents.summarizerLine(tool: "codex", model: " gpt-6-luna\n") == "codex gpt-6-luna", "spaces are trimmed")
+precondition(Agents.summarizerLine(tool: "opencode", model: "ollama/llama3.2:3b") == "opencode ollama/llama3.2:3b", "provider/model:tag stays")
+precondition(Agents.summarizerLine(tool: "claude", model: "haiku; rm -rf ~ $(x)") == "claude haikurm-rfx", "shell characters are dropped")
+precondition(Agents.summarizerLine(tool: "claude", model: "") == "claude", "a blank model is the provider's default")
+precondition(Agents.summarizerLine(tool: "off", model: "x") == "off" && Agents.summarizerLine(tool: "", model: "x") == "", "no model for none or each agent's own")
+try! FileManager.default.createDirectory(at: Agents.summarizerFile(fakeHome).deletingLastPathComponent(), withIntermediateDirectories: true)
+try! "codex gpt-6-luna\n".write(to: Agents.summarizerFile(fakeHome), atomically: true, encoding: .utf8)
+precondition(Agents.summarizer(home: fakeHome) == ("codex", "gpt-6-luna"), "the saved line reads back")
+try! FileManager.default.createDirectory(at: fakeHome.appendingPathComponent(".codex"), withIntermediateDirectories: true)
+precondition(Agents.models("codex", home: fakeHome) == ["gpt-5.6-luna"], "without Codex's list, its default")
+try! #"{"models": [{"slug": "gpt-6-luna", "visibility": "list"}, {"slug": "secret", "visibility": "hide"}]}"#
+    .write(to: fakeHome.appendingPathComponent(".codex/models_cache.json"), atomically: true, encoding: .utf8)
+precondition(Agents.models("codex", home: fakeHome) == ["gpt-6-luna"], "Codex's own listed models")
 try? FileManager.default.removeItem(at: dir)
 print("agents ok")
 

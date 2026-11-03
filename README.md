@@ -7,10 +7,9 @@
 A coding companion for your Mac. Bao, a tiny text-art panda, tells you in one short line when Claude Code, Codex or opencode need you, and keeps you company while they work. Between runs it is a sweet distraction that reminds you to rest your eyes, move, drink water and go to bed.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/poses-dark.png">
-    <img alt="Bao the panda in ten poses: munching bamboo, hello, tickled, hug, tide dance, high five, dizzy, cutely angry, curious and napping" src="docs/poses-light.png">
-  </picture>
+  <img src="docs/agents-demo.gif" width="720" alt="A coding agent in a dark terminal asks to run npm test. Bao jumps up with a '!' and says in a cloud: 'Add forecast view · Claude needs your permission to use Bash'. The agent then finishes, and Bao says: 'The forecast view is done, and its tests pass.'">
+  <br>
+  <sub>A made-up session, with the waits made shorter. Bao speaks when the agent asks for permission and when it finishes.</sub>
 </p>
 
 - **Tells you when your agents need you.** A permission prompt, a question, or finished work, with the session's name: "stocks · Run stopped before writing anything." Connect your agents from Bao's menu.
@@ -21,6 +20,13 @@ A coding companion for your Mac. Bao, a tiny text-art panda, tells you in one sh
 - **Says what your scripts tell it.** `PandaPal --say "Tests passed!"` and Bao jumps up and says it.
 - **Rewards care, not screen time.** Bond, tricks and gifts come from breaks. Videos and calls do not count as breaks.
 - **Private and light.** Bao has no AI and no network of its own, and no account. About 0.14% CPU and 32 MB of memory, measured.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/poses-dark.png">
+    <img alt="Bao the panda in ten poses: munching bamboo, hello, tickled, hug, tide dance, high five, dizzy, cutely angry, curious and napping" src="docs/poses-light.png">
+  </picture>
+</p>
 
 ## Setup
 
@@ -139,7 +145,7 @@ Play earns bond only through its capped surprises. Its patience refills within a
 
 ## Coding agents
 
-Choose **Connect coding agents…** from Bao's menu. Bao finds Claude Code (in the terminal and in the Claude app), Codex and opencode, asks which model writes its short lines, and adds its hooks to each agent's settings. In Codex, type `/hooks` once and trust Bao's two hooks. **Disconnect** in the same window takes them out again.
+Choose **Connect coding agents…** from Bao's menu. Bao finds Claude Code (in the terminal and in the Claude app), Codex and opencode, asks which provider and model write its short lines, and adds its hooks to each agent's settings. In Codex, type `/hooks` once and trust Bao's two hooks. **Disconnect** in the same window takes them out again.
 
 Then Bao jumps up with a "!" and says:
 
@@ -148,13 +154,16 @@ Then Bao jumps up with a "!" and says:
 
 The line starts with the session's name: the one you gave it with `/rename`, else the agent's own title, else the folder. If Bao naps or dozes when a message comes, it wakes up, and its sleep timer starts over.
 
-| Model for short lines | How | Time, measured |
+| Provider for short lines | How, and the model when you leave it blank | Time, measured |
 |---|---|---|
 | Each agent's own model (default) | Claude Haiku for Claude Code, GPT-5.6 Luna for Codex | 2.2 to 3.7 s, 4.6 to 11.0 s |
-| Claude Haiku | `claude -p`, with no tools, MCP servers, hooks, CLAUDE.md or saved session | 2.2 to 3.7 s, about 800 tokens |
-| GPT-5.6 Luna | `codex exec`, read-only and not saved | 4.6 to 11.0 s |
-| Gemini Flash | `gemini -p`; never opens a login page | not measured |
+| Anthropic, through Claude Code | `claude -p` with Haiku, and no tools, MCP servers, hooks, CLAUDE.md or saved session | 2.2 to 3.7 s, about 800 tokens |
+| OpenAI, through Codex | `codex exec` with GPT-5.6 Luna, read-only and not saved | 4.6 to 11.0 s |
+| Google, through Gemini CLI | `gemini -p` with Gemini 2.5 Flash; never opens a login page | not measured |
+| Any provider, through opencode | `opencode run` with opencode's own default model | not measured |
 | None | Only prompts and questions; finished turns stay on your Mac | |
+
+To use another model, type its name in the Model box, or pick one from the box's list. The list for Codex comes from Codex itself. For opencode, write `provider/model`.
 
 Each line runs in the background, so an agent never waits for Bao, and a call stops after 60 seconds. It uses your own agent's login and plan: a Claude Haiku line cost $0.00015 to $0.00026 at API prices, measured.
 
