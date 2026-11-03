@@ -128,10 +128,10 @@ final class TextPandaView: PandaShell {
         return NSSize(width: CGFloat(cols) * cellWidth + pad * 2, height: CGFloat(rows) * lineHeight + pad * 2)
     }()
 
-    /// Bao's size from the menu: 0.75, 1 or 1.3. Everything is drawn at size 1 and the stage scales it.
+    /// Bao's size from the menu: 0.75 (the default), 1 or 1.3. Everything is drawn at size 1 and the stage scales it.
     static var scale: CGFloat = {
         let saved = UserDefaults.standard.double(forKey: "pandaScale")
-        return saved > 0 ? saved : 1
+        return saved > 0 ? saved : 0.75
     }()
     /// Pixels per point in the frame images: Retina, and more when Bao is large, so text stays sharp.
     static var density: CGFloat { 2 * max(1, scale) }

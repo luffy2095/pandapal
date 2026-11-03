@@ -20,6 +20,14 @@ enum Agents {
             .filter { FileManager.default.fileExists(atPath: home.appendingPathComponent($0.1).path) }.map(\.0)
     }
 
+    /// Whether any agent already runs Bao's hook from this app (the hand-made script from before does not count).
+    static func connected(home: URL) -> Bool {
+        [".claude/settings.json", ".codex/hooks.json"].contains { path in
+            let text = (try? String(contentsOf: home.appendingPathComponent(path), encoding: .utf8)) ?? ""
+            return text.contains("PandaPal") && text.contains("--hook")
+        }
+    }
+
     /// Adds the hooks to every agent found, calling `bao` (PandaPal's executable), or takes them out when `bao` is nil.
     /// Returns the agents changed.
     static func connect(home: URL, bao: String?, summarizer: String) throws -> [String] {

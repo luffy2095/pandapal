@@ -68,6 +68,12 @@ final class PandaApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RunLoop.main.add(life, forMode: .common)
         lifeTimer = life
         update()
+        // first launch with agents on this Mac and none connected: offer to connect them, once
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        if !UserDefaults.standard.bool(forKey: "agentsOffered"), !Agents.found(home: home).isEmpty, !Agents.connected(home: home) {
+            UserDefaults.standard.set(true, forKey: "agentsOffered")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.connectAgents() }
+        }
     }
 
     /// A transparent floating panel holding the panda. Clicks on empty pixels pass through to whatever is behind.

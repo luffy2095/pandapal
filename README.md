@@ -69,7 +69,7 @@ Bao appears at the bottom right of your screen. Right-click it, or click 🐼 in
 - **Drag** it anywhere. It remembers the spot, and if that spot ends up off every screen, it comes back to the bottom right.
 - **Tap, double-tap, tap fast, press and hold, drag, shake, tickle or wave** for its personality. The table under "Personality" lists every reaction.
 - **Click** one of its speech bubbles to put it away.
-- **The menu** shows today's screen time, breaks and eye rests, your bond and the next unlock, the gifts found and today's mood. It also has: pet the panda, breathe with Bao for a minute, snooze break reminders for an hour, hide the panda, size (small, normal or large), and quit.
+- **The menu** shows today's screen time, breaks and eye rests, your bond and the next unlock, the gifts found and today's mood. It also has: pet the panda, breathe with Bao for a minute, snooze break reminders for an hour, hide the panda, size (small by default, normal or large), and quit.
 
 ## How it behaves
 
